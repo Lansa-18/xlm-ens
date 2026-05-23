@@ -247,8 +247,11 @@ mod tests {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             client.add_controller(&parent, &intruder, &controller);
         }));
-        assert!(result.is_err(), "intruder should not be able to add a controller");
-        
+        assert!(
+            result.is_err(),
+            "intruder should not be able to add a controller"
+        );
+
         let parent_record = client.parent(&parent).unwrap();
         assert!(!parent_record.controllers.contains(&controller));
     }
@@ -285,7 +288,7 @@ mod tests {
             client.transfer(&fqdn, &intruder, &new_sub_owner);
         }));
         assert!(result.is_err(), "unauthorized transfer should fail");
-        
+
         assert_eq!(client.record(&fqdn).unwrap().owner, new_sub_owner);
     }
 }

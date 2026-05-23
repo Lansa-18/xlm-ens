@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::client::XlmNsClient;
+    use crate::errors::SdkError;
     use crate::types::{
         RegistrationRequest, RenewalRequest, SubmissionStatus, TextRecordUpdate, TransferRequest,
     };
@@ -115,10 +116,7 @@ mod tests {
 
     #[tokio::test]
     async fn owner_portfolio_returns_vec() {
-        let portfolio = client()
-            .get_owner_portfolio("GDRA...OWNER")
-            .await
-            .unwrap();
+        let portfolio = client().get_owner_portfolio("GDRA...OWNER").await.unwrap();
         assert!(!portfolio.is_empty());
         assert_eq!(portfolio[0].owner, "GDRA...OWNER");
     }
@@ -132,11 +130,11 @@ mod tests {
 
     #[tokio::test]
     async fn auction_state_handles_not_found() {
-        use crate::errors::SdkError;
         use crate::errors::ContractErrorCode;
+        use crate::errors::SdkError;
         let result = client().get_auction_state("missing.xlm").await;
         match result {
-            Err(SdkError::ContractError(ContractErrorCode::NameNotFound)) => {},
+            Err(SdkError::ContractError(ContractErrorCode::NameNotFound)) => {}
             _ => panic!("Expected NameNotFound error"),
         }
     }
@@ -383,10 +381,7 @@ mod tests {
 
     #[tokio::test]
     async fn submission_includes_fee_breakdown() {
-        let quote = client()
-            .quote_registration("epsilon", 4)
-            .await
-            .unwrap();
+        let quote = client().quote_registration("epsilon", 4).await.unwrap();
 
         assert_eq!(quote.fee_breakdown.base_fee, 40);
         assert_eq!(quote.fee_breakdown.network_fee, 1);
@@ -403,5 +398,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(receipt.fee_paid, 41);
-        assert_eq!(receipt.submission.network_passphrase, Some("Test SDF Network ; September 2015".into()));
+        assert_eq!(
+            receipt.submission.network_passphrase,
+            Some("Test SDF Network ; September 2015".into())
+        );
     }
+}

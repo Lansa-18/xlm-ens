@@ -3,7 +3,11 @@ use crate::output::{emit, emit_error, OutputFormat};
 use serde_json::json;
 use xlm_ns_sdk::client::XlmNsClient;
 
-pub async fn run_portfolio(config: NetworkConfig, output: OutputFormat, owner: &str) -> anyhow::Result<()> {
+pub async fn run_portfolio(
+    config: NetworkConfig,
+    output: OutputFormat,
+    owner: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url.clone(),
         Some(config.network_passphrase.clone()),

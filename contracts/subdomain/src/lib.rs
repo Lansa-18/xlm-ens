@@ -1,8 +1,9 @@
 mod test;
 
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
-use xlm_ns_common::soroban::{build_subdomain_name, validate_fqdn_soroban};
-use xlm_ns_resolver::ResolverContractClient;
+use xlm_ns_common::soroban::{
+    build_subdomain_name, validate_base_name_soroban, validate_fqdn_soroban,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
@@ -83,6 +84,27 @@ impl SubdomainContract {
         Ok(())
     }
 
+    pub fn remove_controller(
+        env: Env,
+        parent: String,
+        caller: Address,
+        controller: Address,
+    ) -> Result<(), SubdomainError> {
+        let mut parent_record = get_parent(&env, &parent)?;
+        if parent_record.owner != caller {
+            return Err(SubdomainError::Unauthorized);
+        }
+
+        if let Some(index) = parent_record.controllers.first_index_of(&controller) {
+            parent_record.controllers.remove(index);
+            env.storage()
+                .persistent()
+                .set(&DataKey::Parent(parent), &parent_record);
+        }
+
+        Ok(())
+    }
+
     pub fn create(
         env: Env,
         label: String,
@@ -152,32 +174,6 @@ impl SubdomainContract {
 
         env.storage().persistent().remove(&DataKey::Subdomain(fqdn));
 
-        Ok(())
-    }
-
-    /// Revokes a subdomain, removing it from storage.
-    ///
-    /// Deletion Semantics:
-    /// - The current owner of the subdomain can delete it.
-    /// - The owner or a delegated controller of the parent domain can revoke it
-    ///   (e.g., to reclaim the namespace or enforce namespace rules).
-    pub fn revoke(env: Env, fqdn: String, caller: Address) -> Result<(), SubdomainError> {
-        let record = get_subdomain(&env, &fqdn)?;
-
-        let mut is_authorized = false;
-        if record.owner == caller {
-            is_authorized = true;
-        } else if let Ok(parent_record) = get_parent(&env, &record.parent) {
-            if parent_record.owner == caller || parent_record.controllers.contains(&caller) {
-                is_authorized = true;
-            }
-        }
-
-        if !is_authorized {
-            return Err(SubdomainError::Unauthorized);
-        }
-
-        env.storage().persistent().remove(&DataKey::Subdomain(fqdn));
         Ok(())
     }
 

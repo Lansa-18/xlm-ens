@@ -1,5 +1,5 @@
-use anyhow::{Context, anyhow};
 use crate::config::NetworkConfig;
+use anyhow::{anyhow, Context};
 use xlm_ns_sdk::client::XlmNsClient;
 use xlm_ns_sdk::types::{BuildMessageRequest, RegisterChainRequest};
 
@@ -48,7 +48,11 @@ pub async fn run_inspect_route(config: NetworkConfig, chain: &str) -> anyhow::Re
     Ok(())
 }
 
-pub async fn run_generate_payload(config: NetworkConfig, name: &str, chain: &str) -> anyhow::Result<()> {
+pub async fn run_generate_payload(
+    config: NetworkConfig,
+    name: &str,
+    chain: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url,
         Some(config.network_passphrase),

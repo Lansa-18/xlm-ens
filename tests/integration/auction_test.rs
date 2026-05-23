@@ -47,12 +47,14 @@ mod auction_integration {
 
         // Place bids
         client.place_bid(&name, &alice, &500, &time.future(100));
-        client.place_bid(&name, &bob, &800, &time.future(200));     // Highest bid
+        client.place_bid(&name, &bob, &800, &time.future(200)); // Highest bid
         client.place_bid(&name, &charlie, &600, &time.future(300)); // Second highest bid
 
         // Settle auction after ends_at
         time.advance(1001);
-        let settlement = client.settle(&name, &time.now).expect("settlement expected");
+        let settlement = client
+            .settle(&name, &time.now)
+            .expect("settlement expected");
 
         // Bob should win and pay Charlie's bid amount (Vickrey second-price)
         assert_eq!(settlement.winner, Some(bob));
@@ -83,7 +85,9 @@ mod auction_integration {
         client.place_bid(&name, &bob, &900, &time.future(200));
 
         time.advance(1001);
-        let settlement = client.settle(&name, &time.now).expect("settlement expected");
+        let settlement = client
+            .settle(&name, &time.now)
+            .expect("settlement expected");
 
         // Auction should not be sold
         assert_eq!(settlement.winner, None);
@@ -104,12 +108,14 @@ mod auction_integration {
         let starts_at = time.now;
         let ends_at = time.future(1000);
         client.create_auction(&name, &reserve_price, &starts_at, &ends_at);
-        
+
         let alice = Address::generate(&env);
         client.place_bid(&name, &alice, &1000, &time.future(500));
 
         time.advance(1001);
-        let settlement = client.settle(&name, &time.now).expect("settlement expected");
+        let settlement = client
+            .settle(&name, &time.now)
+            .expect("settlement expected");
         assert_eq!(settlement.winner, Some(alice));
         assert_eq!(settlement.clearing_price, 500); // Clears at reserve
         assert!(settlement.sold);

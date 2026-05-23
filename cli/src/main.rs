@@ -204,7 +204,7 @@ enum AuctionCommands {
         signer: Option<String>,
     },
     /// Subdomain management commands
-    /// 
+    ///
     /// Subdomain flow:
     /// 1. Register a parent domain: xlm-ns subdomain register-parent example.xlm <owner>
     /// 2. Add controllers (optional): xlm-ns subdomain add-controller example.xlm <controller>
@@ -360,7 +360,9 @@ fn resolve_signer(name: Option<String>) -> anyhow::Result<Option<SignerProfile>>
         Some(n) => n,
         None => return Ok(None),
     };
-    load_profile(&name).map(Some).context("failed to load signer profile")
+    load_profile(&name)
+        .map(Some)
+        .context("failed to load signer profile")
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -392,43 +394,66 @@ async fn run() -> anyhow::Result<()> {
             network_passphrase: cli.network_passphrase.clone(),
             contract_overrides: contract_overrides.clone(),
         },
-    ).context("failed to load configuration")?;
+    )
+    .context("failed to load configuration")?;
 
     if let Err(err) = validate_contract_policy(&cli.command, &contract_overrides, &config) {
         return Err(anyhow::anyhow!(err));
     }
 
     match cli.command {
-        Commands::Register { name, owner, signer } => {
-            commands::register::run_register(config, &name, &owner, resolve_signer(signer)?).await
-        }
-        Commands::Resolve { name } => {
-            commands::resolve::run_resolve(config, &name).await
-        }
+        Commands::Register {
+            name,
+            owner,
+            signer,
+        } => commands::register::run_register(config, &name, &owner, resolve_signer(signer)?).await,
+        Commands::Resolve { name } => commands::resolve::run_resolve(config, &name).await,
         Commands::ReverseLookup { address } => {
             commands::reverse::run_reverse(config, &address).await
         }
         Commands::Text(sub) => match sub {
-            TextCommand::Get { name, key } => {
-                commands::text::run_get(config, &name, &key).await
-            }
-            TextCommand::Set { name, key, value, signer } => {
-                commands::text::run_set(config, &name, &key, value, resolve_signer(signer)?).await
-            }
+            TextCommand::Get { name, key } => commands::text::run_get(config, &name, &key).await,
+            TextCommand::Set {
+                name,
+                key,
+                value,
+                signer,
+            } => commands::text::run_set(config, &name, &key, value, resolve_signer(signer)?).await,
         },
-        Commands::Transfer { name, new_owner, signer } => {
-            commands::transfer::run_transfer(config, &name, &new_owner, resolve_signer(signer)?).await
+        Commands::Transfer {
+            name,
+            new_owner,
+            signer,
+        } => {
+            commands::transfer::run_transfer(config, &name, &new_owner, resolve_signer(signer)?)
+                .await
         }
-        Commands::Renew { name, years, signer } => {
-            commands::renew::run_renew(config, &name, years, resolve_signer(signer)?).await
-        }
+        Commands::Renew {
+            name,
+            years,
+            signer,
+        } => commands::renew::run_renew(config, &name, years, resolve_signer(signer)?).await,
         Commands::Auction(sub) => match sub {
-            AuctionCommands::Create { name, reserve, duration, signer } => {
-                commands::auction::run_create(config, &name, reserve, duration, resolve_signer(signer)?).await
+            AuctionCommands::Create {
+                name,
+                reserve,
+                duration,
+                signer,
+            } => {
+                commands::auction::run_create(
+                    config,
+                    &name,
+                    reserve,
+                    duration,
+                    resolve_signer(signer)?,
+                )
+                .await
             }
-            AuctionCommands::Bid { name, amount, signer } => {
-                commands::auction::run_bid(config, &name, amount, resolve_signer(signer)?).await
-            }
+            AuctionCommands::Bid {
+                name,
+                amount,
+                signer,
+            } => commands::auction::run_bid(config, &name, amount, resolve_signer(signer)?).await,
             AuctionCommands::Inspect { name } => {
                 commands::auction::run_inspect(config, &name).await
             }
@@ -454,9 +479,11 @@ async fn run() -> anyhow::Result<()> {
             SubdomainCommands::AddController { parent, controller } => {
                 commands::subdomain::run_add_controller(config, &parent, &controller).await
             }
-            SubdomainCommands::Create { label, parent, owner } => {
-                commands::subdomain::run_create_subdomain(config, &label, &parent, &owner).await
-            }
+            SubdomainCommands::Create {
+                label,
+                parent,
+                owner,
+            } => commands::subdomain::run_create_subdomain(config, &label, &parent, &owner).await,
             SubdomainCommands::Transfer { fqdn, new_owner } => {
                 commands::subdomain::run_transfer_subdomain(config, &fqdn, &new_owner).await
             }
@@ -466,9 +493,7 @@ async fn run() -> anyhow::Result<()> {
                 commands::nft::run_inspect(config, cli.output, &token_id).await
             }
         },
-        Commands::Whois { name } => {
-            commands::whois::run_whois(config, cli.output, &name).await
-        }
+        Commands::Whois { name } => commands::whois::run_whois(config, cli.output, &name).await,
         Commands::Portfolio { owner } => {
             commands::portfolio::run_portfolio(config, cli.output, &owner).await
         }
@@ -552,11 +577,7 @@ fn validate_contract_policy(
             &[ContractKind::Registrar],
             &[ContractKind::Registrar],
         ),
-        Commands::Availability { .. } => (
-            "availability",
-            &[ContractKind::Registry],
-            &[],
-        ),
+        Commands::Availability { .. } => ("availability", &[ContractKind::Registry], &[]),
     };
 
     for kind in overrides.provided_kinds() {
@@ -576,31 +597,6 @@ fn validate_contract_policy(
                 kind.flag_name(),
                 kind.env_var()
             ));
-        }
-        Commands::Subdomain { command } => match command {
-            SubdomainCommands::RegisterParent { parent, owner } => {
-                commands::subdomain::run_register_parent(config, &parent, &owner);
-            }
-            SubdomainCommands::AddController { parent, controller } => {
-                commands::subdomain::run_add_controller(config, &parent, &controller);
-            }
-            SubdomainCommands::Create { label, parent, owner } => {
-                commands::subdomain::run_create_subdomain(config, &label, &parent, &owner);
-            }
-            SubdomainCommands::Transfer { fqdn, new_owner } => {
-                commands::subdomain::run_transfer_subdomain(config, &fqdn, &new_owner);
-            }
-        }
-        Commands::Bridge { command } => match command {
-            BridgeCommands::Register { chain } => {
-                commands::bridge::run_register_chain(config, &chain);
-            }
-            BridgeCommands::Inspect { chain } => {
-                commands::bridge::run_inspect_route(config, &chain);
-            }
-            BridgeCommands::Payload { name, chain } => {
-                commands::bridge::run_generate_payload(config, &name, &chain);
-            }
         }
     }
 

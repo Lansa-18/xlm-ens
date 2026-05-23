@@ -1,6 +1,8 @@
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, String, Symbol, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, String, Symbol, Vec,
+};
 use xlm_ns_common::soroban::validate_fqdn_soroban;
 use xlm_ns_common::{DEFAULT_TTL_SECONDS, MAX_METADATA_URI_LENGTH};
 
@@ -152,14 +154,6 @@ impl RegistryContract {
         put_entry(&env, &name, &entry);
         remove_owner_name(&env, &old_owner, &name);
         add_owner_name(&env, &new_owner, &name);
-        // Update resolver owner if resolver is set
-        if let Some(resolver_addr) = &entry.resolver {
-            env.invoke_contract::<()>(
-                resolver_addr,
-                &Symbol::new(&env, "update_owner"),
-                (name.clone(), new_owner.clone()).into_val(&env),
-            );
-        }
         Ok(())
     }
 
@@ -167,7 +161,7 @@ impl RegistryContract {
         env: Env,
         name: String,
         caller: Address,
-        resolver: Option<Address>,
+        resolver: Option<String>,
         now_unix: u64,
     ) -> Result<(), RegistryError> {
         caller.require_auth();
@@ -268,7 +262,9 @@ impl RegistryContract {
         }
 
         remove_owner_name(&env, &entry.owner, &name);
-        env.storage().persistent().remove(&DataKey::Entry(name.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Entry(name.clone()));
 
         env.events().publish(
             (symbol_short!("name"), symbol_short!("burn")),
@@ -338,4 +334,34 @@ fn ensure_owner(
     Ok(())
 }
 
-fn add_owner_name(env: &Env, owne
+fn add_owner_name(env: &Env, owner: &Address, name: &String) {
+    let key = DataKey::OwnerNames(owner.clone());
+    let mut names = env
+        .storage()
+        .persistent()
+        .get::<_, Vec<String>>(&key)
+        .unwrap_or(Vec::new(env));
+
+    if !names.contains(name) {
+        names.push_back(name.clone());
+        env.storage().persistent().set(&key, &names);
+    }
+}
+
+fn remove_owner_name(env: &Env, owner: &Address, name: &String) {
+    let key = DataKey::OwnerNames(owner.clone());
+    let names = env
+        .storage()
+        .persistent()
+        .get::<_, Vec<String>>(&key)
+        .unwrap_or(Vec::new(env));
+
+    let mut filtered = Vec::new(env);
+    for existing in names.iter() {
+        if existing != *name {
+            filtered.push_back(existing);
+        }
+    }
+
+    env.storage().persistent().set(&key, &filtered);
+}

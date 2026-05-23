@@ -6,12 +6,7 @@ use xlm_ns_sdk::client::XlmNsClient;
 /// Run a non-mutating registration quote.
 ///
 /// This command only reads pricing data — no transaction is submitted.
-pub fn run_quote(
-    config: NetworkConfig,
-    output: OutputFormat,
-    label: &str,
-    duration_years: u32,
-) {
+pub fn run_quote(config: NetworkConfig, output: OutputFormat, label: &str, duration_years: u32) {
     let registrar_contract_id = config
         .registrar_contract_id
         .clone()
@@ -46,8 +41,7 @@ pub fn run_quote(
                  \n\
                  \n\
                  ",
-                quote.fee_breakdown.base_fee,
-                quote.fee_currency,
+                quote.fee_breakdown.base_fee, quote.fee_currency,
             );
 
             // Build a concise, readable human block
@@ -56,10 +50,22 @@ pub fn run_quote(
                 format!("  Registrar:      {registrar_contract_id}"),
                 String::new(),
                 format!("  Fee breakdown:"),
-                format!("    Base fee:     {} {}", quote.fee_breakdown.base_fee, quote.fee_currency),
-                format!("    Premium fee:  {} {}", quote.fee_breakdown.premium_fee, quote.fee_currency),
-                format!("    Network fee:  {} {}", quote.fee_breakdown.network_fee, quote.fee_currency),
-                format!("    Total:        {} {}", quote.total_fee, quote.fee_currency),
+                format!(
+                    "    Base fee:     {} {}",
+                    quote.fee_breakdown.base_fee, quote.fee_currency
+                ),
+                format!(
+                    "    Premium fee:  {} {}",
+                    quote.fee_breakdown.premium_fee, quote.fee_currency
+                ),
+                format!(
+                    "    Network fee:  {} {}",
+                    quote.fee_breakdown.network_fee, quote.fee_currency
+                ),
+                format!(
+                    "    Total:        {} {}",
+                    quote.total_fee, quote.fee_currency
+                ),
                 String::new(),
                 format!("  Lifecycle timestamps:"),
                 format!("    Quoted at:    {}", quote.quoted_at),

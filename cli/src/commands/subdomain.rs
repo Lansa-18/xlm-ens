@@ -1,9 +1,15 @@
-use anyhow::Context;
 use crate::config::NetworkConfig;
+use anyhow::Context;
 use xlm_ns_sdk::client::XlmNsClient;
-use xlm_ns_sdk::types::{AddControllerRequest, CreateSubdomainRequest, RegisterParentRequest, TransferSubdomainRequest};
+use xlm_ns_sdk::types::{
+    AddControllerRequest, CreateSubdomainRequest, RegisterParentRequest, TransferSubdomainRequest,
+};
 
-pub async fn run_register_parent(config: NetworkConfig, parent: &str, owner: &str) -> anyhow::Result<()> {
+pub async fn run_register_parent(
+    config: NetworkConfig,
+    parent: &str,
+    owner: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url,
         Some(config.network_passphrase),
@@ -25,7 +31,11 @@ pub async fn run_register_parent(config: NetworkConfig, parent: &str, owner: &st
     Ok(())
 }
 
-pub async fn run_add_controller(config: NetworkConfig, parent: &str, controller: &str) -> anyhow::Result<()> {
+pub async fn run_add_controller(
+    config: NetworkConfig,
+    parent: &str,
+    controller: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url,
         Some(config.network_passphrase),
@@ -47,7 +57,12 @@ pub async fn run_add_controller(config: NetworkConfig, parent: &str, controller:
     Ok(())
 }
 
-pub async fn run_create_subdomain(config: NetworkConfig, label: &str, parent: &str, owner: &str) -> anyhow::Result<()> {
+pub async fn run_create_subdomain(
+    config: NetworkConfig,
+    label: &str,
+    parent: &str,
+    owner: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url,
         Some(config.network_passphrase),
@@ -70,7 +85,11 @@ pub async fn run_create_subdomain(config: NetworkConfig, label: &str, parent: &s
     Ok(())
 }
 
-pub async fn run_transfer_subdomain(config: NetworkConfig, fqdn: &str, new_owner: &str) -> anyhow::Result<()> {
+pub async fn run_transfer_subdomain(
+    config: NetworkConfig,
+    fqdn: &str,
+    new_owner: &str,
+) -> anyhow::Result<()> {
     let client = XlmNsClient::new(
         config.rpc_url,
         Some(config.network_passphrase),

@@ -3,7 +3,11 @@ use crate::output::{emit, emit_error, OutputFormat};
 use serde_json::json;
 use xlm_ns_sdk::client::XlmNsClient;
 
-pub async fn run_inspect(config: NetworkConfig, output: OutputFormat, token_id: &str) -> anyhow::Result<()> {
+pub async fn run_inspect(
+    config: NetworkConfig,
+    output: OutputFormat,
+    token_id: &str,
+) -> anyhow::Result<()> {
     let nft_contract_id = config
         .nft_contract_id
         .clone()

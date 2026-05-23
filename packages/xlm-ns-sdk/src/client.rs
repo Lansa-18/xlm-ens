@@ -3,11 +3,11 @@ use crate::errors::{ContractErrorCode, SdkError};
 use crate::types::{
     AddControllerRequest, AuctionCreateRequest, AuctionInfo, AuctionState, AuctionStatus,
     BidRequest, BridgeRoute, BuildMessageRequest, CreateSubdomainRequest, FeeBreakdown, NameRecord,
-    NftRecord, RegisterChainRequest, RegisterParentRequest, RegistrarMetrics, RegistrationQuote,
-    RegistrationReceipt, RegistrationRequest, RegistryEntry, RenewalReceipt, RenewalRequest,
-    RegisterResult, RenewResult, ResolutionRecord, ResolutionResult, ReverseResolution, Subdomain,
-    SubmissionStatus, TextRecord, TextRecordUpdate, TransactionSubmission, TransferRequest,
-    TransferSubdomainRequest, DEFAULT_FEE_CURRENCY,
+    NftRecord, RegisterChainRequest, RegisterParentRequest, RegisterResult, RegistrarMetrics,
+    RegistrationQuote, RegistrationReceipt, RegistrationRequest, RegistryEntry, RenewResult,
+    RenewalReceipt, RenewalRequest, ResolutionRecord, ResolutionResult, ReverseResolution,
+    Subdomain, SubmissionStatus, TextRecord, TextRecordUpdate, TransactionSubmission,
+    TransferRequest, TransferSubdomainRequest, DEFAULT_FEE_CURRENCY,
 };
 use std::collections::HashMap;
 use stellar_rpc_client::Client;
@@ -362,7 +362,7 @@ impl XlmNsClient {
         let quote = self
             .quote_registration(&request.label, request.duration_years)
             .await?;
-        
+
         // Validate registrar contract is configured
         let registrar_id = self
             .registrar_contract_id

@@ -35,12 +35,12 @@ fi
 # packages/xlm-ns-sdk/src/client.rs.
 declare -a CHECKS=(
   "registry|xlm_ns_registry|register resolve transfer set_resolver renew names_for_owner"
-  "registrar|xlm_ns_registrar|register renew quote"
-  "resolver|xlm_ns_resolver|resolve set_address set_text get_text"
-  "subdomain|xlm_ns_subdomain|create_subdomain transfer_subdomain"
-  "auction|xlm_ns_auction|create_auction bid settle"
-  "bridge|xlm_ns_bridge|register_chain get_route build_message"
-  "nft|xlm_ns_nft|owner_of metadata_uri"
+  "registrar|xlm_ns_registrar|register renew quote_registration"
+  "resolver|xlm_ns_resolver|resolve set_record set_text_record set_primary_name remove_record reverse"
+  "subdomain|xlm_ns_subdomain|register_parent add_controller create transfer revoke"
+  "auction|xlm_ns_auction|create_auction place_bid settle auction"
+  "bridge|xlm_ns_bridge|register_chain route build_message"
+  "nft|xlm_ns_nft|owner_of token_uri"
 )
 
 failures=0

@@ -9,7 +9,7 @@ use soroban_sdk::{contracttype, Address, String as SorobanString};
 pub struct RegistryEntry {
     pub name: SorobanString,
     pub owner: Address,
-    pub resolver: Option<Address>,
+    pub resolver: Option<SorobanString>,
     pub target_address: Option<SorobanString>,
     pub metadata_uri: Option<SorobanString>,
     pub ttl_seconds: u64,

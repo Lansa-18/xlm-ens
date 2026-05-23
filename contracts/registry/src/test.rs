@@ -45,7 +45,7 @@ mod tests {
             &expires_at,
             &grace_period_ends_at,
         );
-        
+
         let transfer_time = time.future(10);
         client.transfer(&name, &owner, &next_owner, &transfer_time);
 
@@ -126,10 +126,17 @@ mod tests {
             &grace_ends_at,
         );
 
-        let invalid_expiry = client.try_renew(&name, &owner, &time.past(1), &grace_ends_at, &time.now);
+        let invalid_expiry =
+            client.try_renew(&name, &owner, &time.past(1), &grace_ends_at, &time.now);
         assert_eq!(invalid_expiry, Ok(Err(RegistryError::InvalidExpiry)));
 
-        let invalid_grace_period = client.try_renew(&name, &owner, &time.future(150), &time.future(149), &time.now);
+        let invalid_grace_period = client.try_renew(
+            &name,
+            &owner,
+            &time.future(150),
+            &time.future(149),
+            &time.now,
+        );
         assert_eq!(
             invalid_grace_period,
             Ok(Err(RegistryError::InvalidGracePeriod))
@@ -159,15 +166,23 @@ mod tests {
             &grace_ends_at,
         );
 
-        let reduced_expiry = client.try_renew(&name, &owner, &time.future(50), &grace_ends_at, &time.now);
+        let reduced_expiry =
+            client.try_renew(&name, &owner, &time.future(50), &grace_ends_at, &time.now);
         assert_eq!(reduced_expiry, Ok(Err(RegistryError::InvalidExpiry)));
 
-        let reduced_grace = client.try_renew(&name, &owner, &expires_at, &time.future(150), &time.now);
+        let reduced_grace =
+            client.try_renew(&name, &owner, &expires_at, &time.future(150), &time.now);
         assert_eq!(reduced_grace, Ok(Err(RegistryError::InvalidGracePeriod)));
 
         let new_expires_at = time.future(200);
         let new_grace_ends_at = time.future(300);
-        client.renew(&name, &owner, &new_expires_at, &new_grace_ends_at, &time.now);
+        client.renew(
+            &name,
+            &owner,
+            &new_expires_at,
+            &new_grace_ends_at,
+            &time.now,
+        );
         let entry = client.resolve(&name, &time.now);
         assert_eq!(entry.expires_at, new_expires_at);
         assert_eq!(entry.grace_period_ends_at, new_grace_ends_at);
@@ -249,7 +264,15 @@ mod tests {
         let name = String::from_str(&env, "timmy.xlm");
         let time = TimeHelper::new();
 
-        client.register(&name, &owner, &None::<String>, &None::<String>, &time.now, &time.future(1_000), &time.future(2_000));
+        client.register(
+            &name,
+            &owner,
+            &None::<String>,
+            &None::<String>,
+            &time.now,
+            &time.future(1_000),
+            &time.future(2_000),
+        );
 
         let result = client.try_transfer(&name, &attacker, &next_owner, &time.future(10));
         assert_eq!(result, Ok(Err(RegistryError::Unauthorized)));
@@ -267,7 +290,15 @@ mod tests {
         let name = String::from_str(&env, "timmy.xlm");
         let time = TimeHelper::new();
 
-        client.register(&name, &owner, &None::<String>, &None::<String>, &time.now, &time.future(1_000), &time.future(2_000));
+        client.register(
+            &name,
+            &owner,
+            &None::<String>,
+            &None::<String>,
+            &time.now,
+            &time.future(1_000),
+            &time.future(2_000),
+        );
 
         let resolver = Some(String::from_str(&env, "resolver_address"));
         let result = client.try_set_resolver(&name, &attacker, &resolver, &time.future(10));
@@ -286,7 +317,15 @@ mod tests {
         let name = String::from_str(&env, "timmy.xlm");
         let time = TimeHelper::new();
 
-        client.register(&name, &owner, &None::<String>, &None::<String>, &time.now, &time.future(1_000), &time.future(2_000));
+        client.register(
+            &name,
+            &owner,
+            &None::<String>,
+            &None::<String>,
+            &time.now,
+            &time.future(1_000),
+            &time.future(2_000),
+        );
 
         let target = Some(String::from_str(&env, "target_address"));
         let result = client.try_set_target_address(&name, &attacker, &target, &time.future(10));
@@ -305,7 +344,15 @@ mod tests {
         let name = String::from_str(&env, "timmy.xlm");
         let time = TimeHelper::new();
 
-        client.register(&name, &owner, &None::<String>, &None::<String>, &time.now, &time.future(1_000), &time.future(2_000));
+        client.register(
+            &name,
+            &owner,
+            &None::<String>,
+            &None::<String>,
+            &time.now,
+            &time.future(1_000),
+            &time.future(2_000),
+        );
 
         let metadata = Some(String::from_str(&env, "ipfs://hash"));
         let result = client.try_set_metadata(&name, &attacker, &metadata, &time.future(10));
@@ -324,9 +371,23 @@ mod tests {
         let name = String::from_str(&env, "timmy.xlm");
         let time = TimeHelper::new();
 
-        client.register(&name, &owner, &None::<String>, &None::<String>, &time.now, &time.future(1_000), &time.future(2_000));
+        client.register(
+            &name,
+            &owner,
+            &None::<String>,
+            &None::<String>,
+            &time.now,
+            &time.future(1_000),
+            &time.future(2_000),
+        );
 
-        let result = client.try_renew(&name, &attacker, &time.future(1500), &time.future(2500), &time.future(10));
+        let result = client.try_renew(
+            &name,
+            &attacker,
+            &time.future(1500),
+            &time.future(2500),
+            &time.future(10),
+        );
         assert_eq!(result, Ok(Err(RegistryError::Unauthorized)));
     }
 

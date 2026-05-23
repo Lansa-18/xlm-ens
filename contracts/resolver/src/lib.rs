@@ -1,9 +1,11 @@
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Map, String, Symbol};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, Map, String, Symbol,
+};
 use xlm_ns_common::soroban::validate_fqdn_soroban;
-use xlm_ns_common::MAX_TEXT_RECORDS;
 use xlm_ns_common::RegistryEntry;
+use xlm_ns_common::MAX_TEXT_RECORDS;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
@@ -56,12 +58,29 @@ impl ResolverContract {
         now_unix: u64,
     ) -> Result<(), ResolverError> {
         validate_fqdn_soroban(&name).map_err(|_| ResolverError::Validation)?;
-        let text_records = match get_record(&env, &name) {
-            Ok(existing) => existing.text_records,
-            Err(_) => Map::new(&env),
+        let canonical_owner = match registry_owner(&env, &name, now_unix)? {
+            Some(registry_owner) => {
+                if registry_owner != owner {
+                    return Err(ResolverError::Unauthorized);
+                }
+                registry_owner
+            }
+            None => owner.clone(),
         };
+
+        let text_records = match get_record(&env, &name) {
+            Ok(existing) => {
+                if existing.owner != canonical_owner {
+                    return Err(ResolverError::Unauthorized);
+                }
+                existing.text_records
+            }
+            Err(ResolverError::RecordNotFound) => Map::new(&env),
+            Err(err) => return Err(err),
+        };
+
         let record = ResolutionRecord {
-            owner,
+            owner: canonical_owner,
             address: address.clone(),
             text_records,
             updated_at: now_unix,
@@ -83,16 +102,8 @@ impl ResolverContract {
         value: String,
         now_unix: u64,
     ) -> Result<(), ResolverError> {
-        let registry = get_registry(&env)?;
-        let registry_entry = env.invoke_contract::<RegistryEntry>(
-            &registry,
-            &Symbol::new(&env, "resolve"),
-            (name.clone(), now_unix).into_val(&env),
-        ).map_err(|_| ResolverError::Unauthorized)?;
-        if registry_entry.owner != caller {
-            return Err(ResolverError::Unauthorized);
-        }
         let mut record = get_record(&env, &name)?;
+        assert_owner(&env, &name, &record, &caller, now_unix)?;
         if !record.text_records.contains_key(key.clone())
             && record.text_records.len() >= MAX_TEXT_RECORDS as u32
         {
@@ -110,14 +121,9 @@ impl ResolverContract {
         caller: Address,
         name: String,
     ) -> Result<(), ResolverError> {
-        let registry = get_registry(&env)?;
-        let registry_entry = env.invoke_contract::<RegistryEntry>(
-            &registry,
-            &Symbol::new(&env, "resolve"),
-            (name.clone(), 0).into_val(&env), // now_unix not needed for owner check
-        ).map_err(|_| ResolverError::Unauthorized)?;
         let record = get_record(&env, &name)?;
-        if registry_entry.owner != caller || record.address != address {
+        assert_owner(&env, &name, &record, &caller, 0)?;
+        if record.address != address {
             return Err(ResolverError::Unauthorized);
         }
         env.storage()
@@ -127,16 +133,8 @@ impl ResolverContract {
     }
 
     pub fn remove_record(env: Env, name: String, caller: Address) -> Result<(), ResolverError> {
-        let registry = get_registry(&env)?;
-        let registry_entry = env.invoke_contract::<RegistryEntry>(
-            &registry,
-            &Symbol::new(&env, "resolve"),
-            (name.clone(), 0).into_val(&env),
-        ).map_err(|_| ResolverError::Unauthorized)?;
-        if registry_entry.owner != caller {
-            return Err(ResolverError::Unauthorized);
-        }
         let record = get_record(&env, &name)?;
+        assert_owner(&env, &name, &record, &caller, 0)?;
         env.storage()
             .persistent()
             .remove(&DataKey::Forward(name.clone()));
@@ -188,7 +186,60 @@ impl ResolverContract {
 }
 
 fn get_registry(env: &Env) -> Result<Address, ResolverError> {
-    env.storage().instance().get(&DataKey::Registry).ok_or(ResolverError::NotInitialized)
+    env.storage()
+        .instance()
+        .get(&DataKey::Registry)
+        .ok_or(ResolverError::NotInitialized)
+}
+
+fn registry_owner(
+    env: &Env,
+    name: &String,
+    now_unix: u64,
+) -> Result<Option<Address>, ResolverError> {
+    let registry = match get_registry(env) {
+        Ok(registry) => registry,
+        Err(ResolverError::NotInitialized) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+
+    let registry_entry = env
+        .invoke_contract::<RegistryEntry>(
+            &registry,
+            &Symbol::new(env, "resolve"),
+            (name.clone(), now_unix).into_val(env),
+        )
+        .map_err(|_| ResolverError::Unauthorized)?;
+
+    Ok(Some(registry_entry.owner))
+}
+
+fn assert_owner(
+    env: &Env,
+    name: &String,
+    record: &ResolutionRecord,
+    caller: &Address,
+    now_unix: u64,
+) -> Result<(), ResolverError> {
+    if let Some(owner) = registry_owner(env, name, now_unix)? {
+        if owner != *caller {
+            return Err(ResolverError::Unauthorized);
+        }
+        return Ok(());
+    }
+
+    if record.owner != *caller {
+        return Err(ResolverError::Unauthorized);
+    }
+
+    Ok(())
+}
+
+fn get_record(env: &Env, name: &String) -> Result<ResolutionRecord, ResolverError> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Forward(name.clone()))
+        .ok_or(ResolverError::RecordNotFound)
 }
 
 fn put_record(env: &Env, name: &String, record: &ResolutionRecord) {

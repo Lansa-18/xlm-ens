@@ -172,7 +172,10 @@ mod registrar_registry_integration {
             registrar.register(&label, &owner2, &1, &quote.fee_stroops, &time.now);
         }));
 
-        assert!(result.is_err(), "second registration should have panicked and reverted");
+        assert!(
+            result.is_err(),
+            "second registration should have panicked and reverted"
+        );
 
         // The original owner should still remain the owner in the registrar record
         let reg_record = registrar.registration(&name).unwrap();

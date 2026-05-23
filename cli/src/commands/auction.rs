@@ -1,6 +1,6 @@
-use anyhow::{Context, anyhow};
 use crate::config::NetworkConfig;
 use crate::signer::SignerProfile;
+use anyhow::{anyhow, Context};
 use xlm_ns_sdk::client::XlmNsClient;
 use xlm_ns_sdk::types::{AuctionCreateRequest, BidRequest};
 
