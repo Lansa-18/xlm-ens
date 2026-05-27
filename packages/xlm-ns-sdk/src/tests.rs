@@ -38,18 +38,23 @@ mod tests {
 
     #[tokio::test]
     async fn registration_quote_exposes_breakdown() {
+        // "alpha" = 5 chars → 250_000_000 stroops/year (contract tier: 4–6 chars)
         let quote = client().quote_registration("alpha", 3).await.unwrap();
         assert_eq!(quote.label, "alpha");
         assert_eq!(quote.duration_years, 3);
-        assert_eq!(quote.fee_breakdown.base_fee, 30);
-        assert_eq!(quote.fee_breakdown.network_fee, 1);
-        assert_eq!(quote.total_fee, 31);
+        assert_eq!(quote.fee_breakdown.base_fee, 750_000_000); // 250_000_000 × 3
+        assert_eq!(quote.fee_breakdown.premium_fee, 0);
+        assert_eq!(quote.fee_breakdown.network_fee, 0);
+        assert_eq!(quote.total_fee, 750_000_000);
         assert_eq!(quote.fee_currency, "XLM");
         assert!(quote.contract_id.is_some());
+        assert!(quote.expires_at > quote.quoted_at);
+        assert!(quote.grace_period_ends_at > quote.expires_at);
     }
 
     #[tokio::test]
     async fn registration_receipt_carries_submission_metadata() {
+        // "beta" = 4 chars → 250_000_000 stroops/year (contract tier: 4–6 chars)
         let receipt = client()
             .register(RegistrationRequest {
                 label: "beta".into(),
@@ -62,7 +67,7 @@ mod tests {
 
         assert_eq!(receipt.name, "beta.xlm");
         assert_eq!(receipt.duration_years, 1);
-        assert_eq!(receipt.fee_paid, 11);
+        assert_eq!(receipt.fee_paid, 250_000_000); // 250_000_000 × 1
         assert_eq!(receipt.submission.signer.as_deref(), Some("treasury"));
         assert!(receipt.submission.network_passphrase.is_some());
     }
@@ -190,6 +195,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_builds_real_submission() {
+        // "gamma" = 5 chars → 250_000_000 stroops/year (contract tier: 4–6 chars)
         let receipt = client()
             .register(RegistrationRequest {
                 label: "gamma".into(),
@@ -200,11 +206,10 @@ mod tests {
             .await
             .unwrap();
 
-        // Verify receipt structure carries tx metadata
         assert_eq!(receipt.name, "gamma.xlm");
         assert_eq!(receipt.owner, "GDRA...OWNER");
         assert_eq!(receipt.duration_years, 2);
-        assert_eq!(receipt.fee_paid, 21); // 2 years * 10 base + 1 network
+        assert_eq!(receipt.fee_paid, 500_000_000); // 250_000_000 × 2
         assert_eq!(receipt.submission.status, SubmissionStatus::Submitted);
         assert_eq!(receipt.submission.signer.as_deref(), Some("registrar"));
         assert!(!receipt.submission.tx_hash.is_empty());
@@ -333,6 +338,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn quote_requires_registrar_contract() {
+        let no_registrar = XlmNsClient::builder("http://localhost")
+            .registry("CDAD...REGISTRY")
+            .build();
+
+        let result = no_registrar.quote_registration("alpha", 1).await;
+        match result {
+            Err(SdkError::InvalidRequest(msg)) => {
+                assert!(msg.contains("registrar"));
+            }
+            _ => panic!("Expected InvalidRequest when registrar contract ID is missing"),
+        }
+    }
+
+    #[tokio::test]
     async fn register_requires_registrar_contract() {
         let no_registrar_client = XlmNsClient::builder("http://localhost")
             .registry("CDAD...REGISTRY")
@@ -381,11 +401,14 @@ mod tests {
 
     #[tokio::test]
     async fn submission_includes_fee_breakdown() {
+        // "epsilon" = 7 chars → 100_000_000 stroops/year (contract tier: 7+ chars)
         let quote = client().quote_registration("epsilon", 4).await.unwrap();
 
-        assert_eq!(quote.fee_breakdown.base_fee, 40);
-        assert_eq!(quote.fee_breakdown.network_fee, 1);
-        assert_eq!(quote.total_fee, 41);
+        assert_eq!(quote.fee_breakdown.base_fee, 400_000_000); // 100_000_000 × 4
+        assert_eq!(quote.fee_breakdown.premium_fee, 0);
+        assert_eq!(quote.fee_breakdown.network_fee, 0);
+        assert_eq!(quote.total_fee, 400_000_000);
+        assert!(quote.grace_period_ends_at > quote.expires_at);
 
         let receipt = client()
             .register(RegistrationRequest {
@@ -397,7 +420,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(receipt.fee_paid, 41);
+        assert_eq!(receipt.fee_paid, 400_000_000);
         assert_eq!(
             receipt.submission.network_passphrase,
             Some("Test SDF Network ; September 2015".into())

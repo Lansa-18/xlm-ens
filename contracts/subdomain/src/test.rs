@@ -1,8 +1,97 @@
 #[cfg(test)]
 mod tests {
-    use soroban_sdk::{testutils::Address as _, Address, Env, String};
+    use soroban_sdk::{testutils::{Address as _, Events as _}, Address, Env, String};
 
     use crate::{SubdomainContract, SubdomainContractClient};
+
+    #[test]
+    fn register_parent_emits_event() {
+        let env = Env::default();
+        let contract_id = env.register(SubdomainContract, ());
+        let client = SubdomainContractClient::new(&env, &contract_id);
+
+        let owner = Address::generate(&env);
+        let parent = String::from_str(&env, "timmy.xlm");
+
+        client.register_parent(&parent, &owner);
+
+        assert_eq!(env.events().all().events().len(), 1);
+    }
+
+    #[test]
+    fn create_subdomain_emits_event() {
+        let env = Env::default();
+        let contract_id = env.register(SubdomainContract, ());
+        let client = SubdomainContractClient::new(&env, &contract_id);
+
+        let owner = Address::generate(&env);
+        let sub_owner = Address::generate(&env);
+        let parent = String::from_str(&env, "timmy.xlm");
+
+        client.register_parent(&parent, &owner);
+        let fqdn = client.create(&String::from_str(&env, "pay"), &parent, &owner, &sub_owner, &100);
+
+        assert_eq!(fqdn, String::from_str(&env, "pay.timmy.xlm"));
+        assert_eq!(env.events().all().events().len(), 1);
+    }
+
+    #[test]
+    fn transfer_emits_event() {
+        let env = Env::default();
+        let contract_id = env.register(SubdomainContract, ());
+        let client = SubdomainContractClient::new(&env, &contract_id);
+
+        let owner = Address::generate(&env);
+        let sub_owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        let parent = String::from_str(&env, "timmy.xlm");
+
+        client.register_parent(&parent, &owner);
+        let fqdn = client.create(&String::from_str(&env, "pay"), &parent, &owner, &sub_owner, &100);
+
+        client.transfer(&fqdn, &sub_owner, &new_owner);
+
+        assert_eq!(env.events().all().events().len(), 1);
+        assert_eq!(client.record(&fqdn).unwrap().owner, new_owner);
+    }
+
+    #[test]
+    fn revoke_emits_event() {
+        let env = Env::default();
+        let contract_id = env.register(SubdomainContract, ());
+        let client = SubdomainContractClient::new(&env, &contract_id);
+
+        let owner = Address::generate(&env);
+        let sub_owner = Address::generate(&env);
+        let parent = String::from_str(&env, "timmy.xlm");
+
+        client.register_parent(&parent, &owner);
+        let fqdn = client.create(&String::from_str(&env, "pay"), &parent, &owner, &sub_owner, &100);
+
+        client.revoke(&fqdn, &sub_owner);
+
+        assert_eq!(env.events().all().events().len(), 1);
+        assert!(!client.exists(&fqdn));
+    }
+
+    #[test]
+    fn add_and_remove_controller_emit_events() {
+        let env = Env::default();
+        let contract_id = env.register(SubdomainContract, ());
+        let client = SubdomainContractClient::new(&env, &contract_id);
+
+        let owner = Address::generate(&env);
+        let controller = Address::generate(&env);
+        let parent = String::from_str(&env, "timmy.xlm");
+
+        client.register_parent(&parent, &owner);
+
+        client.add_controller(&parent, &owner, &controller);
+        assert_eq!(env.events().all().events().len(), 1);
+
+        client.remove_controller(&parent, &owner, &controller);
+        assert_eq!(env.events().all().events().len(), 1);
+    }
 
     #[test]
     fn stores_subdomain_records_in_contract_storage() {

@@ -146,6 +146,7 @@ pub struct RegistrationQuote {
     pub total_fee: u64,
     pub fee_currency: String,
     pub expires_at: u64,
+    pub grace_period_ends_at: u64,
     pub quoted_at: u64,
     pub contract_id: Option<String>,
 }

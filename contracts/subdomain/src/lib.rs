@@ -1,6 +1,8 @@
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+};
 use xlm_ns_common::soroban::{
     build_subdomain_name, validate_base_name_soroban, validate_fqdn_soroban,
 };
@@ -62,6 +64,10 @@ impl SubdomainContract {
             controllers: Vec::new(&env),
         };
         env.storage().persistent().set(&key, &record);
+        env.events().publish(
+            (symbol_short!("subdomain"), symbol_short!("prnt_reg")),
+            (parent, record.owner.clone()),
+        );
         Ok(())
     }
 
@@ -76,10 +82,14 @@ impl SubdomainContract {
             return Err(SubdomainError::Unauthorized);
         }
         if !parent_record.controllers.contains(&controller) {
-            parent_record.controllers.push_back(controller);
+            parent_record.controllers.push_back(controller.clone());
             env.storage()
                 .persistent()
-                .set(&DataKey::Parent(parent), &parent_record);
+                .set(&DataKey::Parent(parent.clone()), &parent_record);
+            env.events().publish(
+                (symbol_short!("subdomain"), symbol_short!("ctrl_add")),
+                (parent, caller, controller),
+            );
         }
         Ok(())
     }
@@ -99,7 +109,11 @@ impl SubdomainContract {
             parent_record.controllers.remove(index);
             env.storage()
                 .persistent()
-                .set(&DataKey::Parent(parent), &parent_record);
+                .set(&DataKey::Parent(parent.clone()), &parent_record);
+            env.events().publish(
+                (symbol_short!("subdomain"), symbol_short!("ctrl_rm")),
+                (parent, caller, controller),
+            );
         }
 
         Ok(())
@@ -135,6 +149,11 @@ impl SubdomainContract {
         add_parent_subdomain(&env, &parent, &fqdn);
         add_owner_subdomain(&env, &owner, &fqdn);
 
+        env.events().publish(
+            (symbol_short!("subdomain"), symbol_short!("created")),
+            (fqdn.clone(), parent, caller, owner),
+        );
+
         Ok(fqdn)
     }
 
@@ -157,6 +176,11 @@ impl SubdomainContract {
         remove_owner_subdomain(&env, &old_owner, &fqdn);
         add_owner_subdomain(&env, &new_owner, &fqdn);
 
+        env.events().publish(
+            (symbol_short!("subdomain"), symbol_short!("transfer")),
+            (fqdn, old_owner, new_owner),
+        );
+
         Ok(())
     }
 
@@ -171,6 +195,11 @@ impl SubdomainContract {
 
         remove_parent_subdomain(&env, &record.parent, &fqdn);
         remove_owner_subdomain(&env, &record.owner, &fqdn);
+
+        env.events().publish(
+            (symbol_short!("subdomain"), symbol_short!("deleted")),
+            (fqdn.clone(), caller),
+        );
 
         env.storage().persistent().remove(&DataKey::Subdomain(fqdn));
 
@@ -198,6 +227,11 @@ impl SubdomainContract {
         if !is_authorized {
             return Err(SubdomainError::Unauthorized);
         }
+
+        env.events().publish(
+            (symbol_short!("subdomain"), symbol_short!("revoked")),
+            (fqdn.clone(), caller),
+        );
 
         env.storage().persistent().remove(&DataKey::Subdomain(fqdn));
         Ok(())
