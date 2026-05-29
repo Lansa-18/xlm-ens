@@ -81,13 +81,14 @@ enum Commands {
         name: String,
     },
     /// Reverse-resolve an address to its primary name.
-    ReverseLookup {
-        /// Address to reverse-lookup
+    #[command(alias = "reverse-lookup")]
+    ReverseResolve {
+        /// Address to reverse-resolve
         address: String,
     },
     /// Read or mutate resolver text records.
     #[command(subcommand)]
-    Text(TextCommand),
+    Text(TextCommands),
     /// Transfer ownership of a name.
     Transfer {
         /// Name to transfer
@@ -119,20 +120,14 @@ enum Commands {
         shell: Shell,
     },
     /// Bridge management commands.
-    Bridge {
-        #[command(subcommand)]
-        command: BridgeCommands,
-    },
+    #[command(subcommand)]
+    Bridge(BridgeCommands),
     /// Subdomain management commands
-    Subdomain {
-        #[command(subcommand)]
-        command: SubdomainCommands,
-    },
+    #[command(subcommand)]
+    Subdomain(SubdomainCommands),
     /// Inspect NFT ownership metadata.
-    Nft {
-        #[command(subcommand)]
-        command: NftCommands,
-    },
+    #[command(subcommand)]
+    Nft(NftCommands),
     /// Show registration details for a single name.
     Whois {
         /// Name to inspect
@@ -337,12 +332,12 @@ async fn run() -> anyhow::Result<()> {
             signer,
         } => commands::register::run_register(config, &name, &owner, resolve_signer(signer)?).await,
         Commands::Resolve { name } => commands::resolve::run_resolve(config, &name).await,
-        Commands::ReverseLookup { address } => {
+        Commands::ReverseResolve { address } => {
             commands::reverse::run_reverse(config, &address).await
         }
         Commands::Text(sub) => match sub {
-            TextCommand::Get { name, key } => commands::text::run_get(config, &name, &key).await,
-            TextCommand::Set {
+            TextCommands::Get { name, key } => commands::text::run_get(config, &name, &key).await,
+            TextCommands::Set {
                 name,
                 key,
                 value,
@@ -390,18 +385,18 @@ async fn run() -> anyhow::Result<()> {
                 commands::auction::run_settle(config, &name, resolve_signer(signer)?).await
             }
         },
-        Commands::Bridge { command } => match command {
+        Commands::Bridge(command) => match command {
             BridgeCommands::Register { chain } => {
                 commands::bridge::run_register_chain(config, &chain).await
             }
             BridgeCommands::Inspect { chain } => {
                 commands::bridge::run_inspect_route(config, &chain).await
             }
-            BridgeCommands::Payload { name, chain } => {
+            BridgeCommands::BuildPayload { name, chain } => {
                 commands::bridge::run_generate_payload(config, &name, &chain).await
             }
         },
-        Commands::Subdomain { command } => match command {
+        Commands::Subdomain(command) => match command {
             SubdomainCommands::RegisterParent { parent, owner } => {
                 commands::subdomain::run_register_parent(config, &parent, &owner).await
             }
@@ -417,7 +412,7 @@ async fn run() -> anyhow::Result<()> {
                 commands::subdomain::run_transfer_subdomain(config, &fqdn, &new_owner).await
             }
         },
-        Commands::Nft { command } => match command {
+        Commands::Nft(command) => match command {
             NftCommands::Inspect { token_id } => {
                 commands::nft::run_inspect(config, cli.output, &token_id).await
             }
@@ -461,8 +456,8 @@ fn validate_contract_policy(
             &[ContractKind::Resolver],
             &[ContractKind::Resolver],
         ),
-        Commands::ReverseLookup { .. } => (
-            "reverse-lookup",
+        Commands::ReverseResolve { .. } => (
+            "reverse-resolve",
             &[ContractKind::Resolver],
             &[ContractKind::Resolver],
         ),
@@ -483,13 +478,13 @@ fn validate_contract_policy(
             &[ContractKind::Auction],
         ),
         Commands::Completions { .. } => ("completions", &[], &[]),
-        Commands::Bridge { .. } => ("bridge", &[ContractKind::Bridge], &[ContractKind::Bridge]),
-        Commands::Subdomain { .. } => (
+        Commands::Bridge(_) => ("bridge", &[ContractKind::Bridge], &[ContractKind::Bridge]),
+        Commands::Subdomain(_) => (
             "subdomain",
             &[ContractKind::Subdomain],
             &[ContractKind::Subdomain],
         ),
-        Commands::Nft { .. } => ("nft", &[ContractKind::Nft], &[ContractKind::Nft]),
+        Commands::Nft(_) => ("nft", &[ContractKind::Nft], &[ContractKind::Nft]),
         Commands::Whois { .. } => (
             "whois",
             &[ContractKind::Registry, ContractKind::Resolver],
