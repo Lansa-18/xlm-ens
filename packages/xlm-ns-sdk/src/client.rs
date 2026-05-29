@@ -11,14 +11,24 @@ use crate::types::{
 };
 use std::collections::HashMap;
 use stellar_rpc_client::Client;
+use xlm_ns_common::{GRACE_PERIOD_SECONDS, YEAR_SECONDS};
 
 const MOCK_REFERENCE_TIMESTAMP: u64 = 1_682_200_000;
 const SECONDS_PER_YEAR: u64 = 31_536_000;
 const BASE_FEE_PER_YEAR: u64 = 10;
-const PREMIUM_FEE: u64 = 0;
 const NETWORK_FEE: u64 = 1;
 const MAX_TRANSACTION_POLL_ATTEMPTS: u32 = 60;
 const TRANSACTION_POLL_INTERVAL_MS: u64 = 1000;
+
+/// Mirrors the registrar contract's `price_for_label_length` so SDK quote
+/// values stay in parity with the deployed contract without an RPC round-trip.
+fn price_for_label_length(length: usize) -> u64 {
+    match length {
+        0..=3 => 1_000_000_000,
+        4..=6 => 250_000_000,
+        _ => 100_000_000,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct XlmNsClient {
@@ -340,15 +350,30 @@ impl XlmNsClient {
                 "duration_years must be greater than zero".into(),
             ));
         }
+        let registrar_id = self
+            .registrar_contract_id
+            .as_ref()
+            .ok_or_else(|| {
+                SdkError::InvalidRequest("registrar contract ID not configured".into())
+            })?
+            .clone();
 
         let years = u64::from(duration_years);
+        let annual_fee = price_for_label_length(label.trim().len());
+        let base_fee = annual_fee.saturating_mul(years);
         let fee_breakdown = FeeBreakdown {
-            base_fee: BASE_FEE_PER_YEAR.saturating_mul(years),
-            premium_fee: PREMIUM_FEE,
-            network_fee: NETWORK_FEE,
+            base_fee,
+            premium_fee: 0,
+            network_fee: 0,
         };
         let total_fee = fee_breakdown.total();
-        let expires_at = MOCK_REFERENCE_TIMESTAMP + years * SECONDS_PER_YEAR;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let expires_at = now.saturating_add(years.saturating_mul(YEAR_SECONDS));
+        let grace_period_ends_at = expires_at.saturating_add(GRACE_PERIOD_SECONDS);
 
         Ok(RegistrationQuote {
             label: label.to_string(),
@@ -357,8 +382,9 @@ impl XlmNsClient {
             total_fee,
             fee_currency: DEFAULT_FEE_CURRENCY.to_string(),
             expires_at,
-            quoted_at: MOCK_REFERENCE_TIMESTAMP,
-            contract_id: self.registrar_contract_id.clone(),
+            grace_period_ends_at,
+            quoted_at: now,
+            contract_id: Some(registrar_id),
         })
     }
 
