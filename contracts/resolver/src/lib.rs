@@ -24,8 +24,8 @@ const DEFAULT_CHAIN: &str = "stellar";
 #[contracttype]
 enum DataKey {
     Forward(String),
-    Reverse(String),        // address -> name (for primary/reverse lookups)
-    Primary(String),        // address -> name (for primary names)
+    Reverse(String), // address -> name (for primary/reverse lookups)
+    Primary(String), // address -> name (for primary names)
     Registry,
 }
 
@@ -83,7 +83,10 @@ impl ResolverContract {
                     return Err(ResolverError::Unauthorized);
                 }
                 // Issue #316: Clean up old reverse/primary mappings when address changes
-                if let Some(old_stellar_addr) = existing.addresses.get(String::from_str(&env, DEFAULT_CHAIN)) {
+                if let Some(old_stellar_addr) = existing
+                    .addresses
+                    .get(String::from_str(&env, DEFAULT_CHAIN))
+                {
                     if old_stellar_addr != address {
                         env.storage()
                             .persistent()
@@ -181,7 +184,7 @@ impl ResolverContract {
         validate_text_record_key(&key).map_err(|_| ResolverError::InvalidKey)?;
 
         // Issue #315: Validate text record value size
-        if value.len() > MAX_TEXT_RECORD_VALUE_LENGTH {
+        if value.len() > MAX_TEXT_RECORD_VALUE_LENGTH as u32 {
             return Err(ResolverError::TextRecordValueTooLong);
         }
 
@@ -222,7 +225,7 @@ impl ResolverContract {
     pub fn remove_record(env: Env, name: String, caller: Address) -> Result<(), ResolverError> {
         let record = get_record(&env, &name)?;
         assert_owner(&env, &name, &record, &caller, 0)?;
-        
+
         // Clean up reverse mappings for all chains, particularly Stellar
         if let Some(stellar_addr) = record.addresses.get(String::from_str(&env, DEFAULT_CHAIN)) {
             env.storage()
@@ -232,7 +235,7 @@ impl ResolverContract {
                 .persistent()
                 .remove(&DataKey::Primary(stellar_addr));
         }
-        
+
         env.storage()
             .persistent()
             .remove(&DataKey::Forward(name.clone()));
@@ -252,11 +255,8 @@ impl ResolverContract {
 
     // Helper method to get the default (Stellar) address for backwards compatibility
     pub fn get_stellar_address(env: Env, name: String) -> Option<String> {
-        Self::resolve(env, name).and_then(|record| {
-            record
-                .addresses
-                .get(String::from_str(&env, DEFAULT_CHAIN))
-        })
+        Self::resolve(env.clone(), name)
+            .and_then(|record| record.addresses.get(String::from_str(&env, DEFAULT_CHAIN)))
     }
 
     pub fn has_record(env: Env, name: String) -> bool {
@@ -287,21 +287,22 @@ impl ResolverContract {
 
     // Issue #321: Batch resolver query for multiple names
     pub fn batch_resolve(env: Env, names: Vec<String>) -> Vec<Option<ResolutionRecord>> {
-        names
-            .iter()
-            .map(|name| {
+        let mut out = Vec::new(&env);
+        for name in names.iter() {
+            out.push_back(
                 env.storage()
                     .persistent()
-                    .get(&DataKey::Forward(name.clone()))
-            })
-            .collect()
+                    .get(&DataKey::Forward(name.clone())),
+            );
+        }
+        out
     }
 
     // Issue #321: Batch reverse lookup for multiple addresses
     pub fn batch_reverse(env: Env, addresses: Vec<String>) -> Vec<Option<String>> {
-        addresses
-            .iter()
-            .map(|address| {
+        let mut out = Vec::new(&env);
+        for address in addresses.iter() {
+            out.push_back(
                 env.storage()
                     .persistent()
                     .get(&DataKey::Primary(address.clone()))
@@ -309,9 +310,10 @@ impl ResolverContract {
                         env.storage()
                             .persistent()
                             .get(&DataKey::Reverse(address.clone()))
-                    })
-            })
-            .collect()
+                    }),
+            );
+        }
+        out
     }
 }
 
@@ -397,11 +399,8 @@ fn validate_text_record_key(key: &String) -> Result<(), ()> {
     key.copy_into_slice(&mut buf[..len]);
     for byte in &buf[..len] {
         let b = *byte;
-        let ok = b.is_ascii_lowercase()
-            || b.is_ascii_digit()
-            || b == b'.'
-            || b == b'-'
-            || b == b'_';
+        let ok =
+            b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'_';
         if !ok {
             return Err(());
         }

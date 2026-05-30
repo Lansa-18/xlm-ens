@@ -1,6 +1,8 @@
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec, token};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Vec,
+};
 use xlm_ns_common::soroban::validate_fqdn_soroban;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,6 +47,8 @@ enum DataKey {
 
 /// Bounded result window for auction discovery queries (#157).
 const MAX_AUCTION_RESULTS: u32 = 100;
+/// Maximum page size for filtered auction listings.
+const MAX_PAGE_SIZE: u32 = 100;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -98,7 +102,9 @@ impl AuctionContract {
             .get(&DataKey::AuctionNames)
             .unwrap_or_else(|| Vec::new(&env));
         names.push_back(name.clone());
-        env.storage().persistent().set(&DataKey::AuctionNames, &names);
+        env.storage()
+            .persistent()
+            .set(&DataKey::AuctionNames, &names);
         Ok(())
     }
 
@@ -231,13 +237,25 @@ impl AuctionContract {
                     clearing_price_paid = true;
                     let overpay = bid.amount.saturating_sub(finalized.clearing_price);
                     if overpay > 0 {
-                        token.transfer(&env.current_contract_address(), &bid.bidder, &(overpay as i128));
+                        token.transfer(
+                            &env.current_contract_address(),
+                            &bid.bidder,
+                            &(overpay as i128),
+                        );
                     }
                     if finalized.clearing_price > 0 {
-                        token.transfer(&env.current_contract_address(), &auction.treasury, &(finalized.clearing_price as i128));
+                        token.transfer(
+                            &env.current_contract_address(),
+                            &auction.treasury,
+                            &(finalized.clearing_price as i128),
+                        );
                     }
                 } else {
-                    token.transfer(&env.current_contract_address(), &bid.bidder, &(bid.amount as i128));
+                    token.transfer(
+                        &env.current_contract_address(),
+                        &bid.bidder,
+                        &(bid.amount as i128),
+                    );
                 }
             }
         }
@@ -297,7 +315,7 @@ impl AuctionContract {
 fn auction_index(env: &Env) -> Vec<String> {
     env.storage()
         .persistent()
-        .get(&DataKey::AuctionIndex)
+        .get(&DataKey::AuctionNames)
         .unwrap_or_else(|| Vec::new(env))
 }
 
@@ -306,7 +324,7 @@ fn append_auction_name(env: &Env, name: &String) {
     index.push_back(name.clone());
     env.storage()
         .persistent()
-        .set(&DataKey::AuctionIndex, &index);
+        .set(&DataKey::AuctionNames, &index);
 }
 
 fn slice_index(env: &Env, index: &Vec<String>, offset: u32, limit: u32) -> Vec<String> {
