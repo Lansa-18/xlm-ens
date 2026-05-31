@@ -1,0 +1,406 @@
+{
+  "generators": {
+    "address": 2,
+    "nonce": 0,
+    "mux_id": 0
+  },
+  "auth": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+  ],
+  "ledger": {
+    "protocol_version": 26,
+    "sequence_number": 0,
+    "timestamp": 0,
+    "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
+    "base_reserve": 0,
+    "min_persistent_entry_ttl": 4096,
+    "min_temp_entry_ttl": 16,
+    "max_entry_ttl": 6312000,
+    "ledger_entries": [
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Auction"
+                  },
+                  {
+                    "string": "alpha.xlm"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "bids"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "amount"
+                              },
+                              "val": {
+                                "u64": "200"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "bidder"
+                              },
+                              "val": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "placed_at"
+                              },
+                              "val": {
+                                "u64": "12"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "ends_at"
+                    },
+                    "val": {
+                      "u64": "20"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "name"
+                    },
+                    "val": {
+                      "string": "alpha.xlm"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "reserve_price"
+                    },
+                    "val": {
+                      "u64": "100"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "starts_at"
+                    },
+                    "val": {
+                      "u64": "10"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Auction"
+                  },
+                  {
+                    "string": "beta.xlm"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "bids"
+                    },
+                    "val": {
+                      "vec": []
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "ends_at"
+                    },
+                    "val": {
+                      "u64": "40"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "name"
+                    },
+                    "val": {
+                      "string": "beta.xlm"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "reserve_price"
+                    },
+                    "val": {
+                      "u64": "100"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "starts_at"
+                    },
+                    "val": {
+                      "u64": "30"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Auction"
+                  },
+                  {
+                    "string": "gamma.xlm"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "bids"
+                    },
+                    "val": {
+                      "vec": []
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "ends_at"
+                    },
+                    "val": {
+                      "u64": "60"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "name"
+                    },
+                    "val": {
+                      "string": "gamma.xlm"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "reserve_price"
+                    },
+                    "val": {
+                      "u64": "100"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "starts_at"
+                    },
+                    "val": {
+                      "u64": "50"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "AuctionIndex"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "string": "alpha.xlm"
+                  },
+                  {
+                    "string": "beta.xlm"
+                  },
+                  {
+                    "string": "gamma.xlm"
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Settlement"
+                  },
+                  {
+                    "string": "alpha.xlm"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "clearing_price"
+                    },
+                    "val": {
+                      "u64": "100"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "settled_at"
+                    },
+                    "val": {
+                      "u64": "21"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "sold"
+                    },
+                    "val": {
+                      "bool": true
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "winner"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "winning_bid"
+                    },
+                    "val": {
+                      "u64": "200"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_code": {
+              "ext": "v0",
+              "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "code": ""
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      }
+    ]
+  },
+  "events": []
+}

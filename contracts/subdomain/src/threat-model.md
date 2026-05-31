@@ -27,7 +27,7 @@ Premium names are sold via a Vickrey-style (second-price) auction in the `Auctio
 
 - **Bid Hiding and Front-running**: In a public ledger, if bids are submitted in plaintext, front-running and bid manipulation are trivial. A commit-reveal scheme is assumed or required for future iterations to ensure bids remain hidden until the settlement phase.
 - **Unsold Outcomes**: Auctions require a reserve price. If the reserve is not met, the name remains unissued and can be auctioned again.
-- **Timestamp Manipulation**: Soroban limits ledger timestamp manipulation, but validators have slight leeway. Auction bidding windows must be sufficiently large (e.g., multiple days) so that minor timestamp drift does not affect the outcome or allow sniper abuse.
+- **Timestamp Manipulation & Sniping**: Soroban limits ledger timestamp manipulation, but validators have slight leeway. Auction bidding windows must be sufficiently large (e.g., multiple days) so that minor timestamp drift does not affect the outcome. To prevent sniper abuse, an anti-sniping extension window is enforced: bids placed near the auction's end automatically extend the end time.
 
 ## Bridge Routing Risks
 

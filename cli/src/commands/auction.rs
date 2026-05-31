@@ -1,6 +1,6 @@
-use anyhow::{Context, anyhow};
 use crate::config::NetworkConfig;
 use crate::signer::SignerProfile;
+use anyhow::{anyhow, Context};
 use xlm_ns_sdk::client::XlmNsClient;
 use xlm_ns_sdk::types::{AuctionCreateRequest, BidRequest};
 
@@ -24,10 +24,16 @@ pub async fn run_create(
     if let Some(ref s) = signer {
         println!("  Signer: {}", s.describe());
     }
+    let treasury = signer
+        .as_ref()
+        .map(|s| s.public_address.clone())
+        .unwrap_or_else(|| format!("G{}", "A".repeat(55)));
 
     let submission = client
         .create_auction(AuctionCreateRequest {
             name: name.into(),
+            asset: "XLM".to_string(),
+            treasury,
             reserve_price: reserve,
             duration_seconds: duration,
             signer: signer.as_ref().map(|s| s.name.clone()),
@@ -136,3 +142,4 @@ pub async fn run_settle(
 
     Ok(())
 }
+//

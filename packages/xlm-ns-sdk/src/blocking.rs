@@ -32,7 +32,7 @@ use crate::types::{
     BuildMessageRequest, CreateSubdomainRequest, NftRecord, RegisterChainRequest,
     RegisterParentRequest, RegistrationQuote, RegistrationReceipt, RegistrationRequest,
     RenewalReceipt, RenewalRequest, ResolutionResult, ReverseResolution, TextRecord,
-    TextRecordUpdate, TransactionSubmission, TransferRequest, TransferSubdomainRequest,
+    TextRecordUpdate, TextRecordsUpdate, TransactionSubmission, TransferRequest, TransferSubdomainRequest,
 };
 
 /// A synchronous facade over [`XlmNsClient`].
@@ -158,6 +158,13 @@ impl XlmNsBlockingClient {
         self.block_on(self.inner.set_text_record(update))
     }
 
+    pub fn set_text_records(
+        &self,
+        update: TextRecordsUpdate,
+    ) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.set_text_records(update))
+    }
+
     pub fn register(&self, request: RegistrationRequest) -> Result<RegistrationReceipt, SdkError> {
         self.block_on(self.inner.register(request))
     }
@@ -170,20 +177,20 @@ impl XlmNsBlockingClient {
         self.block_on(self.inner.transfer(request))
     }
 
-    pub fn register_parent(&self, request: RegisterParentRequest) -> Result<(), SdkError> {
-        self.block_on(self.inner.register_parent(request))
+    pub fn register_parent(&self, request: RegisterParentRequest) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.register_parent(request, false))
     }
 
-    pub fn add_controller(&self, request: AddControllerRequest) -> Result<(), SdkError> {
-        self.block_on(self.inner.add_controller(request))
+    pub fn add_controller(&self, request: AddControllerRequest) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.add_controller(request, false))
     }
 
-    pub fn create_subdomain(&self, request: CreateSubdomainRequest) -> Result<String, SdkError> {
-        self.block_on(self.inner.create_subdomain(request))
+    pub fn create_subdomain(&self, request: CreateSubdomainRequest) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.create_subdomain(request, false))
     }
 
-    pub fn transfer_subdomain(&self, request: TransferSubdomainRequest) -> Result<(), SdkError> {
-        self.block_on(self.inner.transfer_subdomain(request))
+    pub fn transfer_subdomain(&self, request: TransferSubdomainRequest) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.transfer_subdomain(request, false))
     }
 
     pub fn register_chain(&self, request: RegisterChainRequest) -> Result<(), SdkError> {
@@ -192,6 +199,14 @@ impl XlmNsBlockingClient {
 
     pub fn build_message(&self, request: BuildMessageRequest) -> Result<String, SdkError> {
         self.block_on(self.inner.build_message(request))
+    }
+
+    pub fn load_reserved_manifest(
+        &self,
+        labels: Vec<String>,
+        signer: Option<String>,
+    ) -> Result<TransactionSubmission, SdkError> {
+        self.block_on(self.inner.load_reserved_manifest(labels, signer))
     }
 
     pub fn create_auction(

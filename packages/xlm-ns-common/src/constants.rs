@@ -6,5 +6,6 @@ pub const MIN_REGISTRATION_YEARS: u64 = 1;
 pub const MAX_REGISTRATION_YEARS: u64 = 10;
 pub const YEAR_SECONDS: u64 = 31_536_000;
 pub const MAX_TEXT_RECORDS: usize = 16;
+pub const MAX_TEXT_RECORD_VALUE_LENGTH: usize = 256;
 pub const MAX_METADATA_URI_LENGTH: usize = 256;
 pub const MAX_CHAIN_NAME_LENGTH: usize = 32;

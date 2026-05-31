@@ -9,6 +9,7 @@
 //! - 30 s request timeout
 //! - 3 retry attempts on transient transport failures
 //! - 250 ms initial backoff with exponential growth (capped at 5 s)
+//! - 60 s transaction polling window for write-path hydration
 //! - User-agent of `xlm-ns-sdk/<crate-version>`
 //!
 //! Override individual fields with the chainable setters; everything is
@@ -27,6 +28,10 @@ pub const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 
 /// Default upper bound on the exponential backoff delay.
 pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(5);
+
+/// Default amount of time the SDK will wait for a submitted transaction to
+/// reach a terminal state when final-status hydration is enabled.
+pub const DEFAULT_TRANSACTION_POLL_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Returns the default `User-Agent` string identifying this SDK build.
 pub fn default_user_agent() -> String {
@@ -110,6 +115,11 @@ pub struct ClientConfig {
     pub retry: RetryConfig,
     /// Value sent in the HTTP `User-Agent` header on every request.
     pub user_agent: String,
+    /// When true, write-path helpers poll RPC for the terminal transaction
+    /// status before returning a submission result.
+    pub poll_final_status: bool,
+    /// Maximum time spent waiting for the transaction to settle.
+    pub transaction_poll_timeout: Duration,
 }
 
 impl ClientConfig {
@@ -136,6 +146,18 @@ impl ClientConfig {
         self.user_agent = user_agent.into();
         self
     }
+
+    /// Enable or disable post-submission polling.
+    pub fn with_poll_final_status(mut self, poll_final_status: bool) -> Self {
+        self.poll_final_status = poll_final_status;
+        self
+    }
+
+    /// Override the transaction polling timeout.
+    pub fn with_transaction_poll_timeout(mut self, timeout: Duration) -> Self {
+        self.transaction_poll_timeout = timeout;
+        self
+    }
 }
 
 impl Default for ClientConfig {
@@ -144,6 +166,8 @@ impl Default for ClientConfig {
             timeout: DEFAULT_TIMEOUT,
             retry: RetryConfig::default(),
             user_agent: default_user_agent(),
+            poll_final_status: true,
+            transaction_poll_timeout: DEFAULT_TRANSACTION_POLL_TIMEOUT,
         }
     }
 }
@@ -160,6 +184,8 @@ mod tests {
         assert_eq!(config.retry.initial_backoff, DEFAULT_INITIAL_BACKOFF);
         assert_eq!(config.retry.max_backoff, DEFAULT_MAX_BACKOFF);
         assert!(config.user_agent.starts_with("xlm-ns-sdk/"));
+        assert!(config.poll_final_status);
+        assert_eq!(config.transaction_poll_timeout, DEFAULT_TRANSACTION_POLL_TIMEOUT);
     }
 
     #[test]
@@ -167,11 +193,15 @@ mod tests {
         let config = ClientConfig::default()
             .with_timeout(Duration::from_secs(5))
             .with_max_retries(7)
-            .with_user_agent("svc/0.1");
+            .with_user_agent("svc/0.1")
+            .with_poll_final_status(false)
+            .with_transaction_poll_timeout(Duration::from_secs(3));
 
         assert_eq!(config.timeout, Duration::from_secs(5));
         assert_eq!(config.retry.max_retries, 7);
         assert_eq!(config.user_agent, "svc/0.1");
+        assert!(!config.poll_final_status);
+        assert_eq!(config.transaction_poll_timeout, Duration::from_secs(3));
     }
 
     #[test]

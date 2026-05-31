@@ -1,5 +1,5 @@
-use anyhow::Context;
 use crate::config::NetworkConfig;
+use anyhow::Context;
 use xlm_ns_sdk::client::XlmNsClient;
 
 pub async fn run_reverse(config: NetworkConfig, address: &str) -> anyhow::Result<()> {

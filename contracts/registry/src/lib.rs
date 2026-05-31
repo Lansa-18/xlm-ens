@@ -1,10 +1,14 @@
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, String, Symbol, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+};
 use xlm_ns_common::soroban::validate_fqdn_soroban;
+use xlm_ns_common::time::{is_active_at, is_claimable_at};
 use xlm_ns_common::{DEFAULT_TTL_SECONDS, MAX_METADATA_URI_LENGTH};
 
 pub const ADMIN_RECOVERY_SUPPORTED: bool = false;
+pub const STORAGE_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
@@ -23,12 +27,27 @@ pub struct RegistryEntry {
 
 impl RegistryEntry {
     fn is_active_at(&self, now_unix: u64) -> bool {
-        now_unix <= self.expires_at
+        is_active_at(self.expires_at, now_unix)
     }
 
     fn is_claimable_at(&self, now_unix: u64) -> bool {
-        now_unix > self.grace_period_ends_at
+        is_claimable_at(self.grace_period_ends_at, now_unix)
     }
+}
+
+/// Issue #213: Lifecycle state of a name, so callers can branch on the state
+/// directly instead of inferring it from `resolve`/`register` errors.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub enum NameState {
+    /// No entry exists for this name.
+    Missing,
+    /// Registered and not yet expired.
+    Active,
+    /// Expired but still within the grace period (only the owner may renew).
+    GracePeriod,
+    /// Past the grace period; anyone may claim/register it.
+    Claimable,
 }
 
 #[derive(Clone)]
@@ -126,6 +145,29 @@ impl RegistryContract {
         Ok(entry)
     }
 
+    /// Issue #213: Read-only lifecycle state of a name, distinguishing active,
+    /// grace-period, claimable, and missing names without forcing callers to
+    /// infer the state from `resolve`/`register` errors. Unknown or invalid
+    /// names report as [`NameState::Missing`].
+    pub fn name_state(env: Env, name: String, now_unix: u64) -> NameState {
+        match env
+            .storage()
+            .persistent()
+            .get::<_, RegistryEntry>(&DataKey::Entry(name))
+        {
+            None => NameState::Missing,
+            Some(entry) => {
+                if entry.is_active_at(now_unix) {
+                    NameState::Active
+                } else if entry.is_claimable_at(now_unix) {
+                    NameState::Claimable
+                } else {
+                    NameState::GracePeriod
+                }
+            }
+        }
+    }
+
     pub fn check_owner(
         env: Env,
         name: String,
@@ -152,14 +194,10 @@ impl RegistryContract {
         put_entry(&env, &name, &entry);
         remove_owner_name(&env, &old_owner, &name);
         add_owner_name(&env, &new_owner, &name);
-        // Update resolver owner if resolver is set
-        if let Some(resolver_addr) = &entry.resolver {
-            env.invoke_contract::<()>(
-                resolver_addr,
-                &Symbol::new(&env, "update_owner"),
-                (name.clone(), new_owner.clone()).into_val(&env),
-            );
-        }
+        env.events().publish(
+            (symbol_short!("name"), symbol_short!("transfer")),
+            (name, old_owner, new_owner),
+        );
         Ok(())
     }
 
@@ -167,7 +205,7 @@ impl RegistryContract {
         env: Env,
         name: String,
         caller: Address,
-        resolver: Option<Address>,
+        resolver: Option<String>,
         now_unix: u64,
     ) -> Result<(), RegistryError> {
         caller.require_auth();
@@ -252,6 +290,36 @@ impl RegistryContract {
             .unwrap_or(Vec::new(&env))
     }
 
+    /// Returns names present in the owner index that are inconsistent with
+    /// persistent storage — either the entry is missing, or its owner field
+    /// does not match the queried address.
+    ///
+    /// A consistent registry always returns an empty vec. Non-empty results
+    /// indicate that an external write bypassed the normal registration flow
+    /// (e.g. a storage migration gone wrong) and should be investigated before
+    /// proceeding.
+    pub fn audit_owner_index(env: Env, owner: Address) -> Vec<String> {
+        let indexed_names: Vec<String> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::OwnerNames(owner.clone()))
+            .unwrap_or(Vec::new(&env));
+
+        let mut stale = Vec::new(&env);
+        for name in indexed_names.iter() {
+            match env
+                .storage()
+                .persistent()
+                .get::<_, RegistryEntry>(&DataKey::Entry(name.clone()))
+            {
+                None => stale.push_back(name),
+                Some(entry) if entry.owner != owner => stale.push_back(name),
+                _ => {}
+            }
+        }
+        stale
+    }
+
     pub fn burn(
         env: Env,
         name: String,
@@ -268,7 +336,9 @@ impl RegistryContract {
         }
 
         remove_owner_name(&env, &entry.owner, &name);
-        env.storage().persistent().remove(&DataKey::Entry(name.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Entry(name.clone()));
 
         env.events().publish(
             (symbol_short!("name"), symbol_short!("burn")),
@@ -279,6 +349,30 @@ impl RegistryContract {
 
     pub fn supports_admin_recovery(_env: Env) -> bool {
         ADMIN_RECOVERY_SUPPORTED
+    }
+
+    /// Returns the current persistent-storage schema version for upgrade
+    /// planning. Future migrations should branch on this value before
+    /// rewriting any derived indexes.
+    pub fn storage_schema_version(_env: Env) -> u32 {
+        STORAGE_SCHEMA_VERSION
+    }
+}
+
+/// Inserts `name` into `owner`'s index without creating a corresponding
+/// registry entry. Call only from tests to simulate an inconsistent state
+/// that `audit_owner_index` should detect.
+#[cfg(test)]
+pub fn inject_stale_index_entry(env: &Env, owner: &Address, name: &String) {
+    let key = DataKey::OwnerNames(owner.clone());
+    let mut names: Vec<String> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
+    if !names.contains(name) {
+        names.push_back(name.clone());
+        env.storage().persistent().set(&key, &names);
     }
 }
 
@@ -312,7 +406,7 @@ fn validate_lifecycle_timestamps(
     expires_at: u64,
     grace_period_ends_at: u64,
 ) -> Result<(), RegistryError> {
-    if expires_at < now_unix {
+    if !is_active_at(expires_at, now_unix) {
         return Err(RegistryError::InvalidExpiry);
     }
 
@@ -338,4 +432,34 @@ fn ensure_owner(
     Ok(())
 }
 
-fn add_owner_name(env: &Env, owne
+fn add_owner_name(env: &Env, owner: &Address, name: &String) {
+    let key = DataKey::OwnerNames(owner.clone());
+    let mut names = env
+        .storage()
+        .persistent()
+        .get::<_, Vec<String>>(&key)
+        .unwrap_or(Vec::new(env));
+
+    if !names.contains(name) {
+        names.push_back(name.clone());
+        env.storage().persistent().set(&key, &names);
+    }
+}
+
+fn remove_owner_name(env: &Env, owner: &Address, name: &String) {
+    let key = DataKey::OwnerNames(owner.clone());
+    let names = env
+        .storage()
+        .persistent()
+        .get::<_, Vec<String>>(&key)
+        .unwrap_or(Vec::new(env));
+
+    let mut filtered = Vec::new(env);
+    for existing in names.iter() {
+        if existing != *name {
+            filtered.push_back(existing);
+        }
+    }
+
+    env.storage().persistent().set(&key, &filtered);
+}

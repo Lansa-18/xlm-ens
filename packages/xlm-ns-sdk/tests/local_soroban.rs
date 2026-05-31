@@ -123,6 +123,26 @@ async fn renew_against_local_node() {
     ));
 }
 
+#[tokio::test]
+async fn contract_error_surfaces_diagnostic_events() {
+    let Some(env) = live_env() else { return };
+    let client = build_client(&env);
+
+    // Attempt to renew a name that does not exist to trigger a contract error.
+    let result = client
+        .renew(RenewalRequest {
+            name: "this-name-definitely-does-not-exist.xlm".to_string(),
+            additional_years: 1,
+            signer: env.signer.clone(),
+        })
+        .await;
+
+    assert!(
+        result.is_err(),
+        "expected renewal of nonexistent name to fail and surface diagnostic events"
+    );
+}
+
 #[test]
 fn blocking_client_resolves_against_local_node() {
     use xlm_ns_sdk::XlmNsBlockingClient;

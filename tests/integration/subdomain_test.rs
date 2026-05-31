@@ -67,8 +67,9 @@ fn subdomain_flow_covers_controller_delegation_transfer_and_resolution() {
     assert_eq!(resolved_before_transfer.address, first_address);
     assert_eq!(resolver.reverse(&first_address), Some(fqdn.clone()));
 
-    // Transfer subdomain ownership, which also transfers resolver record ownership
-    subdomain.transfer(&fqdn, &subdomain_owner, &next_owner, &resolver_contract_id);
+    // Transfer subdomain ownership, then update resolver ownership explicitly.
+    subdomain.transfer(&fqdn, &subdomain_owner, &next_owner);
+    resolver.transfer_record_owner(&fqdn, &subdomain_owner, &next_owner);
 
     assert!(
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -98,7 +99,7 @@ fn subdomain_flow_covers_controller_delegation_transfer_and_resolution() {
     let resolved_after_transfer = resolver.resolve(&fqdn).unwrap();
     assert_eq!(resolved_after_transfer.owner, next_owner);
     assert_eq!(resolved_after_transfer.address, second_address);
-    assert_eq!(resolver.reverse(&second_address), Some(fqdn));
+    assert_eq!(resolver.reverse(&second_address), Some(fqdn.clone()));
 
     // Test deletion of subdomain and its effect on resolver (none, resolver record persists)
     subdomain.delete(&fqdn, &next_owner);

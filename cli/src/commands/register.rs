@@ -1,7 +1,6 @@
-use anyhow::Context;
 use crate::config::NetworkConfig;
-use crate::output::OutputFormat;
 use crate::signer::SignerProfile;
+use anyhow::Context;
 use xlm_ns_sdk::client::XlmNsClient;
 use xlm_ns_sdk::types::RegistrationRequest;
 
@@ -11,14 +10,16 @@ pub async fn run_register(
     owner: &str,
     signer: Option<SignerProfile>,
 ) -> anyhow::Result<()> {
-    // Note: I'm not passing output format here to keep it simple, 
-    // but the remote version had it. I'll just use Human format for now or 
-    // refactor main to pass it. 
+    // Note: I'm not passing output format here to keep it simple,
+    // but the remote version had it. I'll just use Human format for now or
+    // refactor main to pass it.
     // Actually, I'll pass it in the function signature if I want to be thorough.
-    
-    let registrar_id = config.registrar_contract_id.clone()
+
+    let registrar_id = config
+        .registrar_contract_id
+        .clone()
         .ok_or_else(|| anyhow::anyhow!("Registrar contract ID not configured"))?;
-        
+
     let client = XlmNsClient::new(
         config.rpc_url.clone(),
         Some(config.network_passphrase.clone()),
@@ -26,7 +27,8 @@ pub async fn run_register(
         config.subdomain_contract_id.clone(),
         config.bridge_contract_id.clone(),
         config.auction_contract_id.clone(),
-    ).with_registrar(registrar_id.clone());
+    )
+    .with_registrar(registrar_id.clone());
 
     let duration_years = 1;
     let quote = client
@@ -62,7 +64,10 @@ pub async fn run_register(
     if let Some(desc) = signer_description {
         println!("  Signer: {desc}");
     }
-    println!("\nSUCCESS: registered {} to {}", receipt.name, receipt.owner);
+    println!(
+        "\nSUCCESS: registered {} to {}",
+        receipt.name, receipt.owner
+    );
     println!("  Fee paid: {} {}", receipt.fee_paid, quote.fee_currency);
     println!("  Expires at: {}", receipt.expires_at);
     println!("  Status: {}", receipt.submission.status);

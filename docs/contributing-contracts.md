@@ -181,7 +181,28 @@ leave it alongside real tests.
 
 ---
 
-## 4. Required local commands
+## 4. Storage migration strategy
+
+Treat persistent storage as versioned data, even when the current layout is
+still at version 1. The pattern in this workspace is:
+
+- Add a version marker or migration hook in the contract that owns the
+  persistent state.
+- Route lifecycle and timestamp math through shared helpers so future schema
+  changes do not duplicate logic.
+- Keep compatibility shims small and explicit: if a storage layout changes,
+  the upgrade path should rebuild or repair the derived indexes before the new
+  version is considered active.
+
+The registry contract is the reference example because it owns both canonical
+entries and the owner index. Any future storage upgrade should repair that
+index before writing the new storage version marker. The current code exposes
+`storage_schema_version()` as the lightweight read-only hook for clients and
+upgrade tooling.
+
+---
+
+## 5. Required local commands
 
 Run these before pushing any contract change:
 
@@ -203,6 +224,9 @@ for wasm in target/wasm32-unknown-unknown/release/xlm_ns_*.wasm; do
   soroban contract spec --wasm "$wasm" --output json \
     > "artifacts/specs/${base}.json"
 done
+
+# Optional: Run mutation tests to verify invariant coverage
+./scripts/mutants.sh
 ```
 
 If you do not have `soroban-cli` installed:
@@ -213,7 +237,7 @@ cargo install --locked soroban-cli
 
 ---
 
-## 5. CI expectations
+## 6. CI expectations
 
 | Job | What it checks | Blocks merge? |
 |-----|---------------|---------------|

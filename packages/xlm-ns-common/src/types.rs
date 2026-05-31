@@ -1,3 +1,5 @@
+use crate::time::{grace_period_ends_at, is_active_at, is_claimable_at, within_grace_period};
+
 pub type NameHash = [u8; 32];
 
 #[cfg(feature = "soroban")]
@@ -9,7 +11,7 @@ use soroban_sdk::{contracttype, Address, String as SorobanString};
 pub struct RegistryEntry {
     pub name: SorobanString,
     pub owner: Address,
-    pub resolver: Option<Address>,
+    pub resolver: Option<SorobanString>,
     pub target_address: Option<SorobanString>,
     pub metadata_uri: Option<SorobanString>,
     pub ttl_seconds: u64,
@@ -64,15 +66,15 @@ impl NameRecord {
     }
 
     pub fn is_active_at(&self, now_unix: u64) -> bool {
-        now_unix <= self.expires_at
+        is_active_at(self.expires_at, now_unix)
     }
 
     pub fn is_in_grace_period(&self, now_unix: u64) -> bool {
-        now_unix > self.expires_at && now_unix <= self.grace_period_ends_at
+        within_grace_period(self.expires_at, now_unix)
     }
 
     pub fn is_claimable_at(&self, now_unix: u64) -> bool {
-        now_unix > self.grace_period_ends_at
+        is_claimable_at(self.grace_period_ends_at, now_unix)
     }
 
     pub fn set_owner(&mut self, owner: impl Into<String>) {
@@ -90,6 +92,10 @@ impl NameRecord {
     pub fn extend_expiry(&mut self, expires_at: u64, grace_period_ends_at: u64) {
         self.expires_at = expires_at;
         self.grace_period_ends_at = grace_period_ends_at;
+    }
+
+    pub fn next_grace_period_ends_at(expires_at: u64) -> u64 {
+        grace_period_ends_at(expires_at)
     }
 }
 

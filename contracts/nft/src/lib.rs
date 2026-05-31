@@ -125,6 +125,7 @@ impl NftContract {
             .set(&DataKey::Token(token_id.clone()), &record);
         reindex_owner_token(&env, &owner, &record.owner, &token_id);
         events::transfer(&env, owner, recipient, token_id);
+        reindex_owner_token(env, &previous_owner, &record.owner, &token_id);
         Ok(())
     }
 

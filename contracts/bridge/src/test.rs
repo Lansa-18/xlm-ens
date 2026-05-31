@@ -202,6 +202,9 @@ mod tests {
             client.register_chain(&chain);
         }));
 
-        assert!(result.is_err(), "registration of chain without auth should fail");
+        assert!(
+            result.is_err(),
+            "registration of chain without auth should fail"
+        );
     }
 }

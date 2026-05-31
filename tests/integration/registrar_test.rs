@@ -90,7 +90,10 @@ fn renewal_during_grace_period() {
     let updated_reg_entry = registry.resolve(&name, &time.now);
 
     assert_eq!(reg_record.expires_at, updated_reg_entry.expires_at);
-    assert_eq!(reg_record.grace_period_ends_at, updated_reg_entry.grace_period_ends_at);
+    assert_eq!(
+        reg_record.grace_period_ends_at,
+        updated_reg_entry.grace_period_ends_at
+    );
 }
 
 #[test]

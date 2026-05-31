@@ -9,7 +9,7 @@
 mod registrar_registry_integration {
     use soroban_sdk::{testutils::Address as _, Address, Env, String};
     use xlm_ns_registrar::{RegistrarContract, RegistrarContractClient};
-    use xlm_ns_registry::{RegistryContract, RegistryContractClient};
+    use xlm_ns_registry::{NameState, RegistryContract, RegistryContractClient};
 
     struct TimeHelper {
         pub now: u64,
@@ -33,6 +33,7 @@ mod registrar_registry_integration {
         RegistryContractClient<'static>,
     ) {
         let env = Env::default();
+        env.mock_all_auths();
 
         let registry_id = env.register(RegistryContract, ());
         let registrar_id = env.register(RegistrarContract, ());
@@ -172,10 +173,90 @@ mod registrar_registry_integration {
             registrar.register(&label, &owner2, &1, &quote.fee_stroops, &time.now);
         }));
 
-        assert!(result.is_err(), "second registration should have panicked and reverted");
+        assert!(
+            result.is_err(),
+            "second registration should have panicked and reverted"
+        );
 
         // The original owner should still remain the owner in the registrar record
         let reg_record = registrar.registration(&name).unwrap();
         assert_eq!(reg_record.owner, owner1);
+    }
+
+    /// Issue #214: renewal exactly at the expiry instant succeeds and the
+    /// registry reflects the extended lifecycle.
+    #[test]
+    fn renewal_at_exact_expiry_succeeds_cross_contract() {
+        let (env, registrar, registry) = setup_env();
+        let owner = Address::generate(&env);
+        let label = String::from_str(&env, "edgeone");
+        let name = String::from_str(&env, "edgeone.xlm");
+        let start = 10_000_000u64;
+
+        let quote = registrar.quote_registration(&label, &1, &start);
+        registrar.register(&label, &owner, &1, &quote.fee_stroops, &start);
+
+        let at_expiry = quote.expiry_unix;
+        registrar.renew(&name, &owner, &1, &quote.fee_stroops, &at_expiry);
+
+        let record = registrar.registration(&name).unwrap();
+        let entry = registry.resolve(&name, &at_expiry);
+        assert!(record.expires_at > quote.expiry_unix);
+        assert_eq!(record.expires_at, entry.expires_at);
+        assert_eq!(record.grace_period_ends_at, entry.grace_period_ends_at);
+    }
+
+    /// Issue #214: renewal inside the grace period succeeds; the registry tracks
+    /// the new expiry even though the name was expired at renewal time.
+    #[test]
+    fn renewal_inside_grace_period_succeeds_cross_contract() {
+        let (env, registrar, registry) = setup_env();
+        let owner = Address::generate(&env);
+        let label = String::from_str(&env, "edgetwo");
+        let name = String::from_str(&env, "edgetwo.xlm");
+        let start = 20_000_000u64;
+
+        let quote = registrar.quote_registration(&label, &1, &start);
+        registrar.register(&label, &owner, &1, &quote.fee_stroops, &start);
+
+        // Midpoint of the grace window: expiry < now < grace_end.
+        let in_grace =
+            quote.expiry_unix + (quote.grace_period_ends_at - quote.expiry_unix) / 2;
+        assert_eq!(registry.name_state(&name, &in_grace), NameState::GracePeriod);
+
+        registrar.renew(&name, &owner, &1, &quote.fee_stroops, &in_grace);
+
+        let record = registrar.registration(&name).unwrap();
+        let entry = registry.resolve(&name, &in_grace);
+        assert!(record.expires_at > in_grace);
+        assert_eq!(record.expires_at, entry.expires_at);
+        assert_eq!(registry.name_state(&name, &in_grace), NameState::Active);
+    }
+
+    /// Issue #214: renewal immediately after the grace period ends must revert
+    /// and leave both contracts' state unchanged (registry name is claimable).
+    #[test]
+    fn renewal_after_grace_period_fails_cross_contract() {
+        let (env, registrar, registry) = setup_env();
+        let owner = Address::generate(&env);
+        let label = String::from_str(&env, "edgethree");
+        let name = String::from_str(&env, "edgethree.xlm");
+        let start = 30_000_000u64;
+
+        let quote = registrar.quote_registration(&label, &1, &start);
+        registrar.register(&label, &owner, &1, &quote.fee_stroops, &start);
+
+        let after_grace = quote.grace_period_ends_at + 1;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            registrar.renew(&name, &owner, &1, &quote.fee_stroops, &after_grace);
+        }));
+        assert!(result.is_err(), "renewal after grace period should revert");
+
+        // Registrar record keeps its original (un-extended) expiry.
+        let record = registrar.registration(&name).unwrap();
+        assert_eq!(record.expires_at, quote.expiry_unix);
+
+        // Registry reports the name as claimable, untouched by the failed renewal.
+        assert_eq!(registry.name_state(&name, &after_grace), NameState::Claimable);
     }
 }

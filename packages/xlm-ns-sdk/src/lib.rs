@@ -21,7 +21,8 @@ pub mod types;
 
 pub use blocking::XlmNsBlockingClient;
 pub use client::{XlmNsClient, XlmNsClientBuilder};
-pub use config::{ClientConfig, RetryConfig};
+pub use config::{ClientConfig, RetryConfig, DEFAULT_TRANSACTION_POLL_TIMEOUT};
 pub use errors::SdkError;
 pub use network::verify_network_passphrase;
 pub use network::verify_transaction_passphrase;
+pub use types::{RegisterResult, RegistrationReceipt, RenewResult, RenewalReceipt};

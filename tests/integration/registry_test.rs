@@ -126,7 +126,10 @@ fn test_transfer_invalidates_resolver_authority() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         resolver.set_record(&name, &alice, &address_a, &now);
     }));
-    assert!(result.is_err(), "stale owner should not be able to mutate resolver");
+    assert!(
+        result.is_err(),
+        "stale owner should not be able to mutate resolver"
+    );
 
     // Bob can successfully mutate the record with derived canonical authority
     resolver.set_record(&name, &bob, &address_b, &now);
