@@ -68,9 +68,44 @@ pub fn validate_chain_name(chain: &str) -> Result<(), CommonError> {
     Ok(())
 }
 
+pub fn validate_contract_id(contract_id: &str) -> Result<(), CommonError> {
+    let trimmed = contract_id.trim();
+    if trimmed.is_empty() {
+        return Err(CommonError::EmptyContractId);
+    }
+
+    if trimmed.len() != 56
+        || !trimmed.starts_with('C')
+        || !trimmed.chars().all(|ch| ch.is_ascii_alphanumeric())
+    {
+        return Err(CommonError::InvalidContractId);
+    }
+
+    Ok(())
+}
+
+pub fn validate_account_address(address: &str) -> Result<(), CommonError> {
+    let trimmed = address.trim();
+    if trimmed.is_empty() {
+        return Err(CommonError::EmptyAccountAddress);
+    }
+
+    if trimmed.len() != 56
+        || !trimmed.starts_with('G')
+        || !trimmed.chars().all(|ch| ch.is_ascii_alphanumeric())
+    {
+        return Err(CommonError::InvalidAccountAddress);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse_fqdn, validate_chain_name, validate_label, validate_registration_years};
+    use super::{
+        parse_fqdn, validate_account_address, validate_chain_name, validate_contract_id,
+        validate_label, validate_registration_years,
+    };
     use crate::constants::{
         MAX_NAME_LENGTH, MAX_REGISTRATION_YEARS, MIN_NAME_LENGTH, MIN_REGISTRATION_YEARS,
     };
@@ -141,6 +176,26 @@ mod tests {
     fn validates_chain_name_presence() {
         assert_eq!(validate_chain_name("stellar"), Ok(()));
         assert_eq!(validate_chain_name("   "), Err(CommonError::EmptyChainName));
+    }
+
+    #[test]
+    fn validates_contract_ids_and_account_addresses() {
+        assert_eq!(
+            validate_contract_id("C".repeat(56).as_str()),
+            Ok(())
+        );
+        assert_eq!(
+            validate_account_address("G".repeat(56).as_str()),
+            Ok(())
+        );
+        assert_eq!(
+            validate_contract_id("bad"),
+            Err(CommonError::InvalidContractId)
+        );
+        assert_eq!(
+            validate_account_address("bad"),
+            Err(CommonError::InvalidAccountAddress)
+        );
     }
 
     // ==========================================

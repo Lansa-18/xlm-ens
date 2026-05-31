@@ -1,6 +1,6 @@
-use anyhow::{Context, anyhow};
 use crate::config::NetworkConfig;
 use crate::signer::SignerProfile;
+use anyhow::{anyhow, Context};
 use xlm_ns_sdk::client::XlmNsClient;
 use xlm_ns_sdk::types::RenewalRequest;
 
@@ -45,7 +45,10 @@ pub async fn run_renew(
             println!("  Transaction Hash: {}", receipt.submission.tx_hash);
         }
         None => {
-            return Err(anyhow!("Name '{}' is not registered and cannot be renewed.", name));
+            return Err(anyhow!(
+                "Name '{}' is not registered and cannot be renewed.",
+                name
+            ));
         }
     }
 

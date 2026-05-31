@@ -1,6 +1,8 @@
 pub mod auction;
 pub mod bridge;
 pub mod completions;
+pub mod config;
+pub mod healthcheck;
 pub mod nft;
 pub mod portfolio;
 pub mod quote;

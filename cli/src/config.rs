@@ -4,6 +4,7 @@ use std::env;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
+use xlm_ns_common::validation::validate_contract_id;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
@@ -167,6 +168,10 @@ pub enum ConfigError {
         path: PathBuf,
         source: toml::de::Error,
     },
+    Validation {
+        path: Option<PathBuf>,
+        messages: Vec<String>,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -181,6 +186,13 @@ impl fmt::Display for ConfigError {
                     "failed to parse config file {}: {source}",
                     path.display()
                 )
+            }
+            Self::Validation { path, messages } => {
+                if let Some(path) = path {
+                    write!(f, "invalid config {}: {}", path.display(), messages.join("; "))
+                } else {
+                    write!(f, "invalid config: {}", messages.join("; "))
+                }
             }
         }
     }
@@ -199,7 +211,7 @@ pub fn load_config(
         .unwrap_or_default();
     let env_values = PartialNetworkConfig::from_env();
 
-    Ok(NetworkConfig {
+    let config = NetworkConfig {
         network,
         rpc_url: options
             .rpc_url
@@ -247,8 +259,83 @@ pub fn load_config(
             .or(env_values.nft_contract_id)
             .or(file_values.nft_contract_id),
         config_path: file.map(|(path, _)| path),
-    })
+    };
+
+    validate_network_config(&config)?;
+    Ok(config)
 }
+
+pub fn validate_network_config(config: &NetworkConfig) -> Result<(), ConfigError> {
+    let mut messages = Vec::new();
+
+    if config.rpc_url.trim().is_empty() {
+        messages.push("rpc_url must not be empty".to_string());
+    }
+    if config.network_passphrase.trim().is_empty() {
+        messages.push("network_passphrase must not be empty".to_string());
+    }
+
+    for (kind, id) in [
+        (ContractKind::Registry, &config.registry_contract_id),
+        (ContractKind::Registrar, &config.registrar_contract_id),
+        (ContractKind::Resolver, &config.resolver_contract_id),
+        (ContractKind::Auction, &config.auction_contract_id),
+        (ContractKind::Bridge, &config.bridge_contract_id),
+        (ContractKind::Subdomain, &config.subdomain_contract_id),
+        (ContractKind::Nft, &config.nft_contract_id),
+    ] {
+        if let Some(contract_id) = id.as_deref() {
+            if let Err(err) = validate_contract_id(contract_id) {
+                messages.push(format!("{}: {err}", kind.flag_name()));
+            }
+        }
+    }
+
+    if messages.is_empty() {
+        Ok(())
+    } else {
+        Err(ConfigError::Validation {
+            path: config.config_path.clone(),
+            messages,
+        })
+    }
+}
+
+pub fn config_template(network: Network) -> String {
+    let (rpc_url, passphrase) = match network {
+        Network::Testnet => (
+            "https://soroban-testnet.stellar.org",
+            "Test SDF Network ; September 2015",
+        ),
+        Network::Mainnet => (
+            "https://mainnet.stellar.org:443",
+            "Public Global Stellar Network ; October 2015",
+        ),
+    };
+
+    format!(
+        r#"# xlm-ns configuration file
+#
+# Values in [default] apply to every network unless a per-network section
+# overrides them.
+
+[default]
+rpc_url = "{rpc_url}"
+network_passphrase = "{passphrase}"
+registry_contract_id = "C................................................................"
+registrar_contract_id = "C................................................................"
+resolver_contract_id = "C................................................................"
+auction_contract_id = "C................................................................"
+bridge_contract_id = "C................................................................"
+subdomain_contract_id = "C................................................................"
+nft_contract_id = "C................................................................"
+
+[networks.{network}]
+"#,
+        network = network.as_str(),
+    )
+}
+
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

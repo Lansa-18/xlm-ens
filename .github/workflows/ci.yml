@@ -32,7 +32,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libudev-dev jq
       - name: Install Soroban CLI (optional but useful for integration tests)
         run: cargo install --locked soroban-cli || true
       - name: Run tests
@@ -48,7 +48,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libudev-dev jq
       - name: Install Soroban CLI
         run: cargo install --locked soroban-cli
       - name: Build contracts

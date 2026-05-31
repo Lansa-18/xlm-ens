@@ -12,6 +12,10 @@ pub enum CommonError {
     EmptyOwner,
     InvalidRegistrationPeriod,
     EmptyChainName,
+    EmptyContractId,
+    InvalidContractId,
+    EmptyAccountAddress,
+    InvalidAccountAddress,
 }
 
 impl fmt::Display for CommonError {
@@ -27,6 +31,10 @@ impl fmt::Display for CommonError {
             Self::EmptyOwner => "owner must not be empty",
             Self::InvalidRegistrationPeriod => "registration period is outside the supported range",
             Self::EmptyChainName => "chain name must not be empty",
+            Self::EmptyContractId => "contract ID must not be empty",
+            Self::InvalidContractId => "contract ID is not a valid Stellar contract address",
+            Self::EmptyAccountAddress => "account address must not be empty",
+            Self::InvalidAccountAddress => "account address is not a valid Stellar account address",
         };
 
         f.write_str(message)

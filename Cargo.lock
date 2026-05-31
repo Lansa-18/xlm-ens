@@ -2244,12 +2244,10 @@ version = "23.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00067f52e8bbf1abf0de03fe3e2fbb06910893cfbe9a7d9093d6425658833ff3"
 dependencies = [
- "arbitrary",
  "crate-git-revision",
  "ethnum",
  "num-derive",
  "num-traits",
- "serde",
  "soroban-env-macros 23.0.1",
  "soroban-wasmi",
  "static_assertions",
@@ -2401,20 +2399,6 @@ dependencies = [
 
 [[package]]
 name = "soroban-ledger-snapshot"
-version = "23.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d23caecfbd1b83c687e725611618d2a54f551900edde324da42d0fb67d2adf5"
-dependencies = [
- "serde",
- "serde_json",
- "serde_with",
- "soroban-env-common 23.0.1",
- "soroban-env-host 23.0.1",
- "thiserror",
-]
-
-[[package]]
-name = "soroban-ledger-snapshot"
 version = "26.0.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8330f1ba47d85183b96f6a5f1f774d76100cd40baa79cada77147e11fb4c7b5"
@@ -2433,19 +2417,14 @@ version = "23.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d605064e7c7c08474a750496b256d051ac568aa072254e3b77e080fab99e3fb7"
 dependencies = [
- "arbitrary",
  "bytes-lit",
  "crate-git-revision",
- "ctor",
- "derive_arbitrary",
- "ed25519-dalek",
  "rand",
  "rustc_version",
  "serde",
  "serde_json",
  "soroban-env-guest 23.0.1",
  "soroban-env-host 23.0.1",
- "soroban-ledger-snapshot 23.5.2",
  "soroban-sdk-macros 23.5.2",
  "stellar-strkey 0.0.13",
 ]
@@ -2468,7 +2447,7 @@ dependencies = [
  "serde_json",
  "soroban-env-guest 26.1.2",
  "soroban-env-host 26.1.2",
- "soroban-ledger-snapshot 26.0.0-rc.1",
+ "soroban-ledger-snapshot",
  "soroban-sdk-macros 26.0.0-rc.1",
  "stellar-strkey 0.0.16",
  "visibility",
@@ -2675,7 +2654,6 @@ version = "23.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89d2848e1694b0c8db81fd812bfab5ea71ee28073e09ccc45620ef3cf7a75a9b"
 dependencies = [
- "arbitrary",
  "base64 0.22.1",
  "cfg_eval",
  "crate-git-revision",
@@ -3344,6 +3322,7 @@ dependencies = [
  "tokio",
  "toml",
  "xlm-ns-auction",
+ "xlm-ns-common",
  "xlm-ns-sdk",
 ]
 
@@ -3358,7 +3337,7 @@ dependencies = [
 name = "xlm-ns-integration-tests"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk 23.1.0",
+ "soroban-sdk 26.0.0-rc.1",
  "xlm-ns-registrar",
  "xlm-ns-registry",
  "xlm-ns-resolver",
@@ -3405,6 +3384,7 @@ dependencies = [
  "serde_json",
  "soroban-sdk 23.1.0",
  "stellar-rpc-client",
+ "stellar-xdr 23.0.0",
  "tokio",
  "xlm-ns-common",
 ]

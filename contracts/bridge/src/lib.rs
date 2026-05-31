@@ -1,3 +1,4 @@
+mod axelar;
 mod test;
 
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Env, String};
@@ -57,9 +58,35 @@ impl BridgeContract {
             .get(&DataKey::Route(chain.clone()))
             .ok_or(BridgeError::UnsupportedChain)?;
 
-        Ok(build_gmp_message(
+        Ok(build_forward_gmp_message(
             &env,
             &name,
+            &route.destination_chain,
+            &route.destination_resolver,
+        ))
+    }
+
+    pub fn build_reverse_message(
+        env: Env,
+        address: String,
+        primary_name: String,
+        chain: String,
+    ) -> Result<String, BridgeError> {
+        if address.len() == 0 || primary_name.len() == 0 {
+            return Err(BridgeError::Validation);
+        }
+        validate_fqdn_soroban(&primary_name).map_err(|_| BridgeError::Validation)?;
+        validate_chain_name_soroban(&chain).map_err(|_| BridgeError::Validation)?;
+        let route: BridgeRoute = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Route(chain.clone()))
+            .ok_or(BridgeError::UnsupportedChain)?;
+
+        Ok(build_reverse_gmp_message(
+            &env,
+            &address,
+            &primary_name,
             &route.destination_chain,
             &route.destination_resolver,
         ))
@@ -98,15 +125,27 @@ fn target_for_chain(env: &Env, chain: &String) -> Option<BridgeRoute> {
     }
 }
 
-fn build_gmp_message(
+fn build_forward_gmp_message(
     env: &Env,
     name: &String,
     destination_chain: &String,
     resolver: &String,
 ) -> String {
-    let message = format!(
-        "{{\"type\":\"xlm-ns-resolution\",\"name\":\"{}\",\"destination_chain\":\"{}\",\"resolver\":\"{}\"}}",
-        name, destination_chain, resolver
-    );
-    String::from_str(env, &message)
+    String::from_str(
+        env,
+        &axelar::build_forward_gmp_message(name, destination_chain, resolver),
+    )
+}
+
+fn build_reverse_gmp_message(
+    env: &Env,
+    address: &String,
+    primary_name: &String,
+    destination_chain: &String,
+    resolver: &String,
+) -> String {
+    String::from_str(
+        env,
+        &axelar::build_reverse_gmp_message(address, primary_name, destination_chain, resolver),
+    )
 }

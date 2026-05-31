@@ -21,6 +21,8 @@ The target user experience is straightforward:
 - Premium names can be sold through auctions instead of first-come-first-served
   issuance.
 
+  
+
 ## Architecture
 
 For a detailed breakdown of state ownership, cross-contract flows, and synchronization rules, see the Architecture Documentation.
@@ -241,6 +243,7 @@ Rust to create temporary build directories in the default macOS temp location.
 
 - Testnet operator runbook: `docs/testnet-operator-runbook.md`
 - Bridge payload + resolver schema docs: `docs/schemas.md`
+- Version compatibility matrix: `docs/compatibility.md`
 
 ## Roadmap
 

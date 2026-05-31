@@ -5,7 +5,7 @@ license.workspace = true
 version.workspace = true
 
 [dev-dependencies]
-soroban-sdk = { version = "=23.1.0", features = ["testutils"] }
+soroban-sdk = { version = "=26.0.0-rc.1", features = ["testutils"] }
 xlm-ns-registrar = { path = "../contracts/registrar" }
 xlm-ns-registry  = { path = "../contracts/registry" }
 xlm-ns-resolver  = { path = "../contracts/resolver" }
@@ -34,3 +34,11 @@ path = "integration/auction_test.rs"
 [[test]]
 name = "bridge_test"
 path = "integration/bridge_test.rs"
+
+# Storage / hot-path benchmarks. Marked `#[ignore]` in source so they do not
+# run in default `cargo test`; invoke with:
+#   cargo test --test storage_benchmarks -- --ignored --nocapture
+# or `scripts/run-benchmarks.sh`.
+[[test]]
+name = "storage_benchmarks"
+path = "benches/storage_benchmarks.rs"
