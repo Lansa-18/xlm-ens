@@ -40,11 +40,7 @@
               },
               "durability": "persistent",
               "val": {
-                "vec": [
-                  {
-                    "string": "pay.timmy.xlm"
-                  }
-                ]
+                "vec": []
               }
             }
           },
@@ -115,11 +111,7 @@
               },
               "durability": "persistent",
               "val": {
-                "vec": [
-                  {
-                    "string": "pay.timmy.xlm"
-                  }
-                ]
+                "vec": []
               }
             }
           },
