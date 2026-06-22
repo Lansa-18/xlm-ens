@@ -17,6 +17,10 @@ pub use xlm_ns_common::GRACE_PERIOD_SECONDS;
 
 pub const ADMIN_RECOVERY_SUPPORTED: bool = false;
 
+// Default rate limit: 5 registrations per 24 hours (86400 seconds)
+pub const DEFAULT_RATE_LIMIT_WINDOW_SECONDS: u64 = 86400;
+pub const DEFAULT_MAX_REGISTRATIONS_PER_WINDOW: u64 = 5;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
 pub struct PricingBreakdown {
@@ -83,6 +87,13 @@ pub struct RegistrationRecord {
     pub renewed_at: u64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub struct RateLimitConfig {
+    pub window_size_seconds: u64,
+    pub max_registrations_per_window: u64,
+}
+
 #[derive(Clone)]
 #[contracttype]
 enum DataKey {
@@ -92,6 +103,9 @@ enum DataKey {
     Registry,
     RegistrationCount,
     RenewalCount,
+    RateLimitConfig,
+    WhitelistedAddress(Address),
+    RegistrationWindow(Address, u64),
 }
 
 #[contracterror]
@@ -108,6 +122,7 @@ pub enum RegistrarError {
     RegistrationClaimable = 8,
     NotInitialized = 9,
     AlreadyInitialized = 10,
+    RateLimitExceeded = 11,
 }
 
 #[contract]
@@ -120,6 +135,21 @@ impl RegistrarContract {
             return Err(RegistrarError::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::Registry, &registry);
+        
+        // Initialize rate limit config with defaults if not already set
+        if !env
+            .storage()
+            .persistent()
+            .has(&DataKey::RateLimitConfig)
+        {
+            let config = RateLimitConfig {
+                window_size_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+                max_registrations_per_window: DEFAULT_MAX_REGISTRATIONS_PER_WINDOW,
+            };
+            env.storage()
+                .persistent()
+                .set(&DataKey::RateLimitConfig, &config);
+        }
         Ok(())
     }
 
@@ -259,6 +289,9 @@ impl RegistrarContract {
             return Err(RegistrarError::Reserved);
         }
 
+        // Check rate limit before proceeding with registration
+        check_rate_limit(&env, &owner, now_unix)?;
+
         let quote = build_quote(&label, years, now_unix);
         if payment_stroops < quote.fee_stroops {
             return Err(RegistrarError::InsufficientFee);
@@ -287,6 +320,10 @@ impl RegistrarContract {
         env.storage()
             .persistent()
             .set(&DataKey::Registration(name.clone()), &record);
+
+        // Record this registration for rate limit tracking
+        record_registration(&env, &owner, now_unix)?;
+
         let treasury = env
             .storage()
             .persistent()
@@ -540,6 +577,160 @@ impl RegistrarContract {
                 .unwrap_or(0),
         }
     }
+
+    /// Governance function: Set rate limit configuration
+    pub fn set_rate_limit_config(
+        env: Env,
+        window_size_seconds: u64,
+        max_registrations_per_window: u64,
+    ) -> Result<(), RegistrarError> {
+        let config = RateLimitConfig {
+            window_size_seconds,
+            max_registrations_per_window,
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::RateLimitConfig, &config);
+
+        env.events().publish(
+            (symbol_short!("registrar"), symbol_short!("rate")),
+            (window_size_seconds, max_registrations_per_window),
+        );
+
+        Ok(())
+    }
+
+    /// Governance function: Get current rate limit configuration
+    pub fn get_rate_limit_config(env: Env) -> RateLimitConfig {
+        env.storage()
+            .persistent()
+            .get(&DataKey::RateLimitConfig)
+            .unwrap_or(RateLimitConfig {
+                window_size_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+                max_registrations_per_window: DEFAULT_MAX_REGISTRATIONS_PER_WINDOW,
+            })
+    }
+
+    /// Governance function: Whitelist an address to bypass rate limiting
+    pub fn whitelist_address(env: Env, address: Address) -> Result<(), RegistrarError> {
+        env.storage()
+            .persistent()
+            .set(&DataKey::WhitelistedAddress(address.clone()), &true);
+
+        env.events().publish(
+            (symbol_short!("registrar"), symbol_short!("wlist")),
+            address,
+        );
+
+        Ok(())
+    }
+
+    /// Governance function: Remove address from whitelist
+    pub fn remove_whitelist_address(env: Env, address: Address) -> Result<(), RegistrarError> {
+        let key = DataKey::WhitelistedAddress(address.clone());
+        env.storage().persistent().remove(&key);
+
+        env.events().publish(
+            (symbol_short!("registrar"), symbol_short!("unwlist")),
+            address,
+        );
+
+        Ok(())
+    }
+
+    /// Check if an address is whitelisted
+    pub fn is_whitelisted(env: Env, address: Address) -> bool {
+        env.storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::WhitelistedAddress(address))
+            .unwrap_or(false)
+    }
+
+    /// Get rate limit status for an address (read-only)
+    pub fn get_registrations_in_window(env: Env, address: Address, now_unix: u64) -> u64 {
+        let config = Self::get_rate_limit_config(&env);
+        let window_start = now_unix.saturating_sub(config.window_size_seconds);
+        let key = DataKey::RegistrationWindow(address, window_start);
+        env.storage()
+            .persistent()
+            .get::<_, u64>(&key)
+            .unwrap_or(0)
+    }
+}
+
+/// Check if an address is within rate limits for a given time window
+fn check_rate_limit(
+    env: &Env,
+    address: &Address,
+    now_unix: u64,
+) -> Result<(), RegistrarError> {
+    // Check if address is whitelisted (bypass rate limit)
+    if env
+        .storage()
+        .persistent()
+        .get::<_, bool>(&DataKey::WhitelistedAddress(address.clone()))
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    // Get rate limit config
+    let config = env
+        .storage()
+        .persistent()
+        .get::<_, RateLimitConfig>(&DataKey::RateLimitConfig)
+        .unwrap_or(RateLimitConfig {
+            window_size_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+            max_registrations_per_window: DEFAULT_MAX_REGISTRATIONS_PER_WINDOW,
+        });
+
+    let window_start = now_unix.saturating_sub(config.window_size_seconds);
+    let key = DataKey::RegistrationWindow(address.clone(), window_start);
+
+    let count = env
+        .storage()
+        .persistent()
+        .get::<_, u64>(&key)
+        .unwrap_or(0);
+
+    // Check if we've exceeded the limit
+    if count >= config.max_registrations_per_window {
+        env.events().publish(
+            (symbol_short!("registrar"), symbol_short!("limit")),
+            (address.clone(), count),
+        );
+        return Err(RegistrarError::RateLimitExceeded);
+    }
+
+    Ok(())
+}
+
+/// Record a registration for an address within the current window
+fn record_registration(env: &Env, address: &Address, now_unix: u64) -> Result<(), RegistrarError> {
+    // Get rate limit config
+    let config = env
+        .storage()
+        .persistent()
+        .get::<_, RateLimitConfig>(&DataKey::RateLimitConfig)
+        .unwrap_or(RateLimitConfig {
+            window_size_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+            max_registrations_per_window: DEFAULT_MAX_REGISTRATIONS_PER_WINDOW,
+        });
+
+    let window_start = now_unix.saturating_sub(config.window_size_seconds);
+    let key = DataKey::RegistrationWindow(address.clone(), window_start);
+
+    let count = env
+        .storage()
+        .persistent()
+        .get::<_, u64>(&key)
+        .unwrap_or(0);
+
+    env.storage()
+        .persistent()
+        .set(&key, &count.saturating_add(1));
+
+    Ok(())
 }
 
 fn build_quote(label: &String, years: u64, now_unix: u64) -> RegistrationQuote {

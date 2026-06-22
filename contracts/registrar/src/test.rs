@@ -533,4 +533,306 @@ mod tests {
         assert_eq!(metrics.total_registrations, report.total_registrations);
         assert_eq!(metrics.total_renewals, report.total_renewals);
     }
+
+    // ==================== Rate Limiting Tests ====================
+
+    #[test]
+    fn rate_limit_config_initialized_with_defaults() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let config = client.get_rate_limit_config();
+        assert_eq!(config.window_size_seconds, 86400); // 24 hours
+        assert_eq!(config.max_registrations_per_window, 5);
+    }
+
+    #[test]
+    fn can_register_up_to_limit_within_window() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Register 5 names within the same time window (should all succeed)
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("name{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Verify we have 5 registrations
+        let metrics = client.fee_metrics();
+        assert_eq!(metrics.total_registrations, 5);
+    }
+
+    #[test]
+    fn rate_limit_exceeded_on_sixth_registration_in_window() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Register 5 names successfully
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("limit{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Attempt 6th registration - should fail with rate limit error
+        let label6 = String::from_str(&env, "limit5");
+        let quote6 = client.quote_registration(&label6, &1, &now);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.register(&label6, &owner, &1, &quote6.fee_stroops, &now);
+        }));
+        assert!(
+            result.is_err(),
+            "6th registration should fail with rate limit exceeded"
+        );
+    }
+
+    #[test]
+    fn whitelisted_address_bypasses_rate_limit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Whitelist the owner
+        client.whitelist_address(&owner);
+        assert!(client.is_whitelisted(&owner));
+
+        // Should be able to register more than 5 names
+        for i in 0..10 {
+            let label = String::from_str(&env, &format!("white{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        let metrics = client.fee_metrics();
+        assert_eq!(metrics.total_registrations, 10);
+    }
+
+    #[test]
+    fn remove_whitelist_applies_rate_limit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Whitelist and register 3 names
+        client.whitelist_address(&owner);
+        for i in 0..3 {
+            let label = String::from_str(&env, &format!("rmwhite{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Remove from whitelist
+        client.remove_whitelist_address(&owner);
+        assert!(!client.is_whitelisted(&owner));
+
+        // Register 2 more (within the limit of 5)
+        for i in 3..5 {
+            let label = String::from_str(&env, &format!("rmwhite{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // 6th registration should fail
+        let label6 = String::from_str(&env, "rmwhite5");
+        let quote6 = client.quote_registration(&label6, &1, &now);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.register(&label6, &owner, &1, &quote6.fee_stroops, &now);
+        }));
+        assert!(result.is_err(), "Should hit rate limit after whitelist removal");
+    }
+
+    #[test]
+    fn different_addresses_have_independent_rate_limits() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner1 = Address::generate(&env);
+        let owner2 = Address::generate(&env);
+        let now = 1000u64;
+
+        // Owner1 registers 5 names
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("owner1_{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner1, &1, &quote.fee_stroops, &now);
+        }
+
+        // Owner2 should still be able to register 5 names
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("owner2_{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner2, &1, &quote.fee_stroops, &now);
+        }
+
+        let metrics = client.fee_metrics();
+        assert_eq!(metrics.total_registrations, 10);
+    }
+
+    #[test]
+    fn registrations_outside_window_do_not_count_toward_limit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+        let window_size = 86400u64;
+        let future_window = now + window_size + 1; // Outside the current window
+
+        // Register 5 names at time now
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("window1_{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Register 5 more names in a future time window
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("window2_{}", i));
+            let quote = client.quote_registration(&label, &1, &future_window);
+            client.register(
+                &label,
+                &owner,
+                &1,
+                &quote.fee_stroops,
+                &future_window,
+            );
+        }
+
+        let metrics = client.fee_metrics();
+        assert_eq!(metrics.total_registrations, 10);
+    }
+
+    #[test]
+    fn get_registrations_in_window_returns_count() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Initially should be 0
+        let initial_count = client.get_registrations_in_window(&owner, &now);
+        assert_eq!(initial_count, 0);
+
+        // Register 3 names
+        for i in 0..3 {
+            let label = String::from_str(&env, &format!("count{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Should now be 3
+        let count_after = client.get_registrations_in_window(&owner, &now);
+        assert_eq!(count_after, 3);
+    }
+
+    #[test]
+    fn set_rate_limit_config_changes_limit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        // Change rate limit to 3 per window
+        client.set_rate_limit_config(&86400, &3);
+        let config = client.get_rate_limit_config();
+        assert_eq!(config.max_registrations_per_window, 3);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Register 3 names successfully
+        for i in 0..3 {
+            let label = String::from_str(&env, &format!("limited{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // 4th should fail
+        let label4 = String::from_str(&env, "limited3");
+        let quote4 = client.quote_registration(&label4, &1, &now);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.register(&label4, &owner, &1, &quote4.fee_stroops, &now);
+        }));
+        assert!(result.is_err(), "Should fail with new limit of 3");
+    }
+
+    #[test]
+    fn rate_limit_events_emitted_on_limit_exceeded() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(RegistrarContract, ());
+        let client = RegistrarContractClient::new(&env, &contract_id);
+        let registry_id = env.register(RegistryContract, ());
+        client.initialize(&registry_id);
+
+        let owner = Address::generate(&env);
+        let now = 1000u64;
+
+        // Register 5 names
+        for i in 0..5 {
+            let label = String::from_str(&env, &format!("event{}", i));
+            let quote = client.quote_registration(&label, &1, &now);
+            client.register(&label, &owner, &1, &quote.fee_stroops, &now);
+        }
+
+        // Attempt 6th - should emit rate limit event
+        let label6 = String::from_str(&env, "event5");
+        let quote6 = client.quote_registration(&label6, &1, &now);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.register(&label6, &owner, &1, &quote6.fee_stroops, &now);
+        }));
+
+        // Check that events were emitted
+        let all_events = env.events().all().events();
+        assert!(
+            !all_events.is_empty(),
+            "Rate limit events should have been emitted"
+        );
+    }
 }
