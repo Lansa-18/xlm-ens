@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# xlm-ns-canary — log analysis tool for canary test results
+# Usage:
+#   xlm-ns-canary report  [--log FILE] [--since DATE] [--until DATE]
+#   xlm-ns-canary compare [--log FILE] <date1> <date2>
+set -euo pipefail
+
+LOG_FILE="${CANARY_LOG_FILE:-canary-results.ndjson}"
+
+usage() {
+  cat >&2 <<EOF
+Usage:
+  $(basename "$0") report  [--log FILE] [--since DATE] [--until DATE]
+  $(basename "$0") compare [--log FILE] <date1> <date2>
+
+Options:
+  --log FILE    Path to NDJSON log file (default: canary-results.ndjson)
+  --since DATE  ISO date lower bound for report  (e.g. 2026-06-01)
+  --until DATE  ISO date upper bound for report  (e.g. 2026-06-22)
+
+compare DATE format: YYYY-MM-DD  (matches any run whose timestamp starts with that date)
+EOF
+  exit 1
+}
+
+# Filter NDJSON by optional date bounds (prefix match on timestamp field).
+filter_range() {
+  local since="$1" until="$2"
+  jq -c --arg s "$since" --arg u "$until" '
+    select(
+      ($s == "" or .timestamp >= $s) and
+      ($u == "" or .timestamp <= ($u + "T99"))
+    )
+  '
+}
+
+cmd_report() {
+  local since="" until=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --log)   LOG_FILE="$2"; shift 2 ;;
+      --since) since="$2";    shift 2 ;;
+      --until) until="$2";    shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [[ -f "$LOG_FILE" ]] || { echo "Log not found: $LOG_FILE" >&2; exit 1; }
+
+  filter_range "$since" "$until" < "$LOG_FILE" | jq -s '
+    def pct(n;d): if d == 0 then 0 else ((n / d) * 100 | round) end;
+
+    # --- overall summary ---
+    {
+      total:   length,
+      passed:  (map(select(.result=="pass")) | length),
+      failed:  (map(select(.result=="fail")) | length),
+    } as $totals |
+
+    # --- per-test stats ---
+    (group_by(.test) | map({
+      test:        .[0].test,
+      runs:        length,
+      passes:      (map(select(.result=="pass")) | length),
+      failures:    (map(select(.result=="fail")) | length),
+      pass_rate:   (pct(map(select(.result=="pass")) | length; length) | tostring + "%"),
+      avg_ms:      (map(.duration_ms) | add / length | round),
+      p95_ms:      (sort_by(.duration_ms) | .[ (length * 0.95 | floor) ].duration_ms),
+      last_error:  (map(select(.result=="fail" and .error != null)) | last | .error // null),
+    })) as $by_test |
+
+    # --- latency trend: mean per calendar day ---
+    (group_by(.timestamp[0:10]) | map({
+      date: .[0].timestamp[0:10],
+      avg_ms: (map(.duration_ms) | add / length | round),
+      pass_rate: (pct(map(select(.result=="pass")) | length; length) | tostring + "%"),
+    })) as $trend |
+
+    {
+      summary: ($totals + {pass_rate: (pct($totals.passed; $totals.total) | tostring + "%")}),
+      by_test: $by_test,
+      daily_trend: $trend,
+    }
+  '
+}
+
+cmd_compare() {
+  local date1="" date2=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --log) LOG_FILE="$2"; shift 2 ;;
+      -*)    usage ;;
+      *)
+        if   [[ -z "$date1" ]]; then date1="$1"
+        elif [[ -z "$date2" ]]; then date2="$1"
+        else usage
+        fi
+        shift ;;
+    esac
+  done
+  [[ -n "$date1" && -n "$date2" ]] || usage
+  [[ -f "$LOG_FILE" ]] || { echo "Log not found: $LOG_FILE" >&2; exit 1; }
+
+  # Extract one JSON array per date, then diff pass rates and avg latency.
+  jq -s --arg d1 "$date1" --arg d2 "$date2" '
+    def stats(rows):
+      (rows | length) as $n |
+      if $n == 0 then {runs: 0, pass_rate: "n/a", avg_ms: null}
+      else {
+        runs: $n,
+        pass_rate: (((rows | map(select(.result=="pass")) | length) / $n * 100 | round) | tostring + "%"),
+        avg_ms: (rows | map(.duration_ms) | add / $n | round),
+      }
+      end;
+
+    . as $all |
+    ($all | map(select(.timestamp[0:10] == $d1))) as $a |
+    ($all | map(select(.timestamp[0:10] == $d2))) as $b |
+    (($a + $b) | map(.test) | unique) |
+    map(. as $t | {
+      test: $t,
+      ($d1): stats($a | map(select(.test == $t))),
+      ($d2): stats($b | map(select(.test == $t))),
+    })
+  ' < "$LOG_FILE"
+}
+
+[[ $# -gt 0 ]] || usage
+cmd="$1"; shift
+case "$cmd" in
+  report)  cmd_report  "$@" ;;
+  compare) cmd_compare "$@" ;;
+  *)       usage ;;
+esac
