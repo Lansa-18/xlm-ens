@@ -18,9 +18,18 @@ jobs:
             rpc_url: https://soroban-rpc.mainnet.stellar.org
     steps:
       - uses: actions/checkout@v4
+
       - name: Canary (${{ matrix.name }})
         env:
           SOROBAN_RPC_URL: ${{ matrix.rpc_url }}
-        run: |
-          bash scripts/canary/public_endpoints.sh
+          CANARY_NETWORK: ${{ matrix.name }}
+          CANARY_LOG_FILE: canary-results.ndjson
+        run: bash scripts/canary/public_endpoints.sh
 
+      - name: Upload canary log (${{ matrix.name }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-log-${{ matrix.name }}-${{ github.run_id }}
+          path: canary-results.ndjson
+          retention-days: 90
