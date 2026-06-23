@@ -35,69 +35,8 @@ pub enum BridgeError {
 pub const CONTRACT_VERSION: u32 = 1;
 
 #[contractevent]
-pub struct ContractUpgraded {
-    pub old_version: u32,
-    pub new_version: u32,
-    pub admin: Address,
-}
-
-#[contract]
-pub struct BridgeContract;
-
-#[contractimpl]
-impl BridgeContract {
-    pub fn version(_env: Env) -> u32 {
-        CONTRACT_VERSION
-    }
-
-    pub fn initialize(env: Env, admin: Address) -> Result<(), BridgeError> {
-        if env.storage().instance().has(&DataKey::Admin) {
-            return Err(BridgeError::Validation);
-        }
-        env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage()
-            .persistent()
-            .set(&DataKey::ContractVersion, &CONTRACT_VERSION);
-        Ok(())
-    }
-
-    pub fn get_version(env: Env) -> u32 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::ContractVersion)
-            .unwrap_or(CONTRACT_VERSION)
-    }
-
-    pub fn upgrade(
-        env: Env,
-        new_wasm_hash: Bytes,
-        migration_data: Bytes,
-    ) -> Result<(), BridgeError> {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(BridgeError::UpgradeFailed)?;
-        admin.require_auth();
-
-        let current_version = Self::get_version(env.clone());
-        let target_version = decode_target_version(&migration_data);
-
-        for v in current_version..target_version {
-            migrate(v, v + 1, &migration_data);
-        }
-
-        env.storage()
-            .persistent()
-            .set(&DataKey::ContractVersion, &target_version);
-
-        env.events().publish(
-            (symbol_short!("bridge"), symbol_short!("upgraded")),
-            ContractUpgraded {
-                old_version: current_version,
-                new_version: target_version,
-                admin,
-            },
+#[contracttype]
+            (current_version, target_version, admin),
         );
 
         env.deployer().update_current_contract_wasm(new_wasm_hash);

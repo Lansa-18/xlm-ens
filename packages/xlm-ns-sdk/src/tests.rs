@@ -1,7 +1,10 @@
-#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match, clippy::duplicated_attributes)]
-#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match, clippy::duplicated_attributes)]
-#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]
-#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]
+#![allow(
+    dead_code,
+    unused_variables,
+    clippy::module_inception,
+    clippy::single_match,
+    clippy::duplicated_attributes
+)]
 #[cfg(test)]
 mod tests {
     use crate::client::XlmNsClient;
@@ -943,4 +946,3 @@ mod tests {
         assert_eq!(result.name, "retry.xlm");
     }
 }
-#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]

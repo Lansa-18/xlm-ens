@@ -230,7 +230,9 @@ mod tests {
             ledger_submitted: 42,
         }));
         assert!(!is_retryable(&SdkError::InvalidRequest("bad input".into())));
-        assert!(!is_retryable(&SdkError::ContractError(ContractErrorCode::NameNotFound)));
+        assert!(!is_retryable(&SdkError::ContractError(
+            ContractErrorCode::NameNotFound
+        )));
         assert!(!is_retryable(&SdkError::NetworkPassphraseMismatch {
             configured: "a".into(),
             rpc_reported: "b".into(),

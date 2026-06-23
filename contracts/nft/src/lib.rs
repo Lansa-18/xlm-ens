@@ -37,6 +37,7 @@ pub enum NftError {
 pub const CONTRACT_VERSION: u32 = 1;
 
 #[contractevent]
+#[contracttype]
 pub struct ContractUpgraded {
     pub old_version: u32,
     pub new_version: u32,
@@ -70,11 +71,7 @@ impl NftContract {
             .unwrap_or(CONTRACT_VERSION)
     }
 
-    pub fn upgrade(
-        env: Env,
-        new_wasm_hash: Bytes,
-        migration_data: Bytes,
-    ) -> Result<(), NftError> {
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>, migration_data: Bytes) -> Result<(), NftError> {
         let admin: Address = env
             .storage()
             .instance()
@@ -102,7 +99,7 @@ impl NftContract {
             },
         );
 
-        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        env.deployer().update_current_contract_wasm(new_wasm_hash.to_bytes());
 
         Ok(())
     }

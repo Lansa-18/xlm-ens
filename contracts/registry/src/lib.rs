@@ -13,6 +13,7 @@ pub const STORAGE_SCHEMA_VERSION: u32 = 1;
 pub const CONTRACT_VERSION: u32 = 1;
 
 #[contractevent]
+#[contracttype]
 pub struct ContractUpgraded {
     pub old_version: u32,
     pub new_version: u32,

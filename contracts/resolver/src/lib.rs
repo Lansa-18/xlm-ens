@@ -96,6 +96,7 @@ pub enum ResolverError {
 
 /// Emitted when a forward record (name → address) is created or updated.
 #[contractevent]
+#[contracttype]
 pub struct ForwardUpdated {
     pub name: String,
     pub address: String,
@@ -105,6 +106,7 @@ pub struct ForwardUpdated {
 
 /// Emitted when a reverse mapping (address → name) is written.
 #[contractevent]
+#[contracttype]
 pub struct ReverseUpdated {
     pub address: String,
     pub name: String,
@@ -112,6 +114,7 @@ pub struct ReverseUpdated {
 
 /// Emitted when a primary name is set for an address.
 #[contractevent]
+#[contracttype]
 pub struct PrimaryNameSet {
     pub address: String,
     pub name: String,
@@ -119,6 +122,7 @@ pub struct PrimaryNameSet {
 
 /// Emitted when a text record is created or updated.
 #[contractevent]
+#[contracttype]
 pub struct TextRecordUpdated {
     pub name: String,
     pub key: String,
@@ -128,6 +132,7 @@ pub struct TextRecordUpdated {
 
 /// Emitted when a record (and its reverse/primary) is removed.
 #[contractevent]
+#[contracttype]
 pub struct RecordRemoved {
     pub name: String,
     pub former_address: Option<String>,
@@ -135,6 +140,7 @@ pub struct RecordRemoved {
 
 /// Emitted when the contract is upgraded.
 #[contractevent]
+#[contracttype]
 pub struct ContractUpgraded {
     pub old_version: u32,
     pub new_version: u32,
@@ -152,11 +158,7 @@ impl ResolverContract {
         CONTRACT_VERSION
     }
 
-    pub fn initialize(
-        env: Env,
-        registry: Address,
-        admin: Address,
-    ) -> Result<(), ResolverError> {
+    pub fn initialize(env: Env, registry: Address, admin: Address) -> Result<(), ResolverError> {
         if env.storage().instance().has(&DataKey::Registry) {
             return Err(ResolverError::Unauthorized);
         }
@@ -178,7 +180,7 @@ impl ResolverContract {
 
     pub fn upgrade(
         env: Env,
-        new_wasm_hash: Bytes,
+        new_wasm_hash: BytesN<32>,
         migration_data: Bytes,
     ) -> Result<(), ResolverError> {
         let admin: Address = env
@@ -208,7 +210,7 @@ impl ResolverContract {
             },
         );
 
-        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        env.deployer().update_current_contract_wasm(new_wasm_hash.to_bytes());
 
         Ok(())
     }
