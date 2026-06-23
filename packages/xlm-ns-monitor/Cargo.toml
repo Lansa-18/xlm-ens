@@ -1,0 +1,16 @@
+[package]
+name = "xlm-ns-monitor"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json"] }
+xlm-ns-sdk = { path = "../xlm-ns-sdk" }
+xlm-ns-common = { path = "../xlm-ns-common" }

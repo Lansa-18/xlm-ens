@@ -70,11 +70,7 @@ impl NftContract {
             .unwrap_or(CONTRACT_VERSION)
     }
 
-    pub fn upgrade(
-        env: Env,
-        new_wasm_hash: Bytes,
-        migration_data: Bytes,
-    ) -> Result<(), NftError> {
+    pub fn upgrade(env: Env, new_wasm_hash: Bytes, migration_data: Bytes) -> Result<(), NftError> {
         let admin: Address = env
             .storage()
             .instance()

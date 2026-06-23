@@ -152,11 +152,7 @@ impl ResolverContract {
         CONTRACT_VERSION
     }
 
-    pub fn initialize(
-        env: Env,
-        registry: Address,
-        admin: Address,
-    ) -> Result<(), ResolverError> {
+    pub fn initialize(env: Env, registry: Address, admin: Address) -> Result<(), ResolverError> {
         if env.storage().instance().has(&DataKey::Registry) {
             return Err(ResolverError::Unauthorized);
         }

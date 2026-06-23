@@ -390,7 +390,9 @@ impl XlmNsClient {
             ttl_seconds: 3600,
             registered_at: MOCK_REFERENCE_TIMESTAMP.saturating_add(u64::from(ledger)),
             expires_at: MOCK_REFERENCE_TIMESTAMP + SECONDS_PER_YEAR,
-            grace_period_ends_at: MOCK_REFERENCE_TIMESTAMP + SECONDS_PER_YEAR + GRACE_PERIOD_SECONDS,
+            grace_period_ends_at: MOCK_REFERENCE_TIMESTAMP
+                + SECONDS_PER_YEAR
+                + GRACE_PERIOD_SECONDS,
             transfer_count: 0,
         }
     }

@@ -18,7 +18,6 @@ async-trait = "0.1"
 tracing = "0.1"
 
 # Added for retry logic with exponential backoff
-tracing = "0.1"
 rand = { version = "0.8", features = ["std", "std_rng"] }
 
 [dev-dependencies]

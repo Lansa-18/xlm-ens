@@ -200,8 +200,13 @@ where
 
     pub async fn start(&mut self) -> Result<(), SdkError> {
         let rendered = self.config.rendered_toml();
-        self.primary.start(self.next_start_ledger(), &rendered).await?;
-        info!("captive core started at ledger {}", self.next_start_ledger());
+        self.primary
+            .start(self.next_start_ledger(), &rendered)
+            .await?;
+        info!(
+            "captive core started at ledger {}",
+            self.next_start_ledger()
+        );
         Ok(())
     }
 
@@ -256,7 +261,11 @@ where
 
             if Instant::now() >= self.next_primary_retry_at {
                 let rendered = self.config.rendered_toml();
-                match self.primary.start(self.next_start_ledger(), &rendered).await {
+                match self
+                    .primary
+                    .start(self.next_start_ledger(), &rendered)
+                    .await
+                {
                     Ok(()) => {
                         info!(
                             "captive core recovered, resuming primary ingest from ledger {}",
@@ -312,7 +321,11 @@ where
                 backoff
             );
             tokio::time::sleep(backoff).await;
-            match self.primary.start(self.next_start_ledger(), &rendered).await {
+            match self
+                .primary
+                .start(self.next_start_ledger(), &rendered)
+                .await
+            {
                 Ok(()) => {
                     info!(
                         "captive core restart succeeded on attempt {}",
@@ -343,7 +356,9 @@ where
     }
 
     fn restart_delay(&self, attempt: u32) -> Duration {
-        let multiplier = 1u32.checked_shl(attempt.saturating_sub(1).min(8)).unwrap_or(256);
+        let multiplier = 1u32
+            .checked_shl(attempt.saturating_sub(1).min(8))
+            .unwrap_or(256);
         self.config
             .restart_backoff
             .checked_mul(multiplier)
@@ -360,22 +375,26 @@ enum CaptiveCoreReader {
 impl CaptiveCoreReader {
     async fn next_frame(&mut self, timeout: Duration) -> Result<Vec<u8>, SdkError> {
         match self {
-            Self::Stdout(reader) => tokio::time::timeout(timeout, read_length_prefixed_frame(reader))
-                .await
-                .map_err(|_| {
-                    SdkError::Ingestion(format!(
-                        "captive core heartbeat timed out after {} ms",
-                        timeout.as_millis()
-                    ))
-                })?,
-            Self::Socket(reader) => tokio::time::timeout(timeout, read_length_prefixed_frame(reader))
-                .await
-                .map_err(|_| {
-                    SdkError::Ingestion(format!(
-                        "captive core heartbeat timed out after {} ms",
-                        timeout.as_millis()
-                    ))
-                })?,
+            Self::Stdout(reader) => {
+                tokio::time::timeout(timeout, read_length_prefixed_frame(reader))
+                    .await
+                    .map_err(|_| {
+                        SdkError::Ingestion(format!(
+                            "captive core heartbeat timed out after {} ms",
+                            timeout.as_millis()
+                        ))
+                    })?
+            }
+            Self::Socket(reader) => {
+                tokio::time::timeout(timeout, read_length_prefixed_frame(reader))
+                    .await
+                    .map_err(|_| {
+                        SdkError::Ingestion(format!(
+                            "captive core heartbeat timed out after {} ms",
+                            timeout.as_millis()
+                        ))
+                    })?
+            }
         }
     }
 }
@@ -412,9 +431,9 @@ impl TokioCaptiveCoreBackend {
             .config
             .working_dir
             .join(format!("stellar-core-{start_ledger}.cfg.toml"));
-        fs::write(&config_path, rendered_toml)
-            .await
-            .map_err(|e| SdkError::Ingestion(format!("failed to write captive core config: {e}")))?;
+        fs::write(&config_path, rendered_toml).await.map_err(|e| {
+            SdkError::Ingestion(format!("failed to write captive core config: {e}"))
+        })?;
         Ok(config_path)
     }
 
@@ -477,7 +496,9 @@ impl CaptiveCoreBackend for TokioCaptiveCoreBackend {
             self.stop().await?;
         }
 
-        let config_path = self.write_runtime_config(start_ledger, rendered_toml).await?;
+        let config_path = self
+            .write_runtime_config(start_ledger, rendered_toml)
+            .await?;
         let args = self.config.command_line(&config_path, start_ledger);
         let mut command = Command::new(&self.config.binary_path);
         command.args(&args);
@@ -595,8 +616,9 @@ impl<T> RpcLedgersRemoteSource<T> {
         xdr_format: Option<String>,
         mapper: impl Fn(Ledger) -> Result<IngestedLedger<T>, SdkError> + Send + Sync + 'static,
     ) -> Result<Self, SdkError> {
-        let client = StellarRpcClient::new(rpc_url)
-            .map_err(|e| SdkError::Ingestion(format!("failed to create RPC fallback client: {e}")))?;
+        let client = StellarRpcClient::new(rpc_url).map_err(|e| {
+            SdkError::Ingestion(format!("failed to create RPC fallback client: {e}"))
+        })?;
         Ok(Self {
             client,
             xdr_format,
@@ -640,10 +662,8 @@ pub struct RpcLedgerCloseMetaRemoteSource {
 
 impl RpcLedgerCloseMetaRemoteSource {
     pub fn new(rpc_url: &str) -> Result<Self, SdkError> {
-        let inner = RpcLedgersRemoteSource::new(
-            rpc_url,
-            Some("json".to_string()),
-            |ledger: Ledger| {
+        let inner =
+            RpcLedgersRemoteSource::new(rpc_url, Some("json".to_string()), |ledger: Ledger| {
                 if let Some(metadata) = ledger.metadata_json {
                     let raw_xdr = metadata.to_xdr(Limits::none()).map_err(|e| {
                         SdkError::Ingestion(format!(
@@ -659,13 +679,14 @@ impl RpcLedgerCloseMetaRemoteSource {
                     });
                 }
 
-                let metadata = LedgerCloseMeta::from_xdr_base64(&ledger.metadata_xdr, Limits::none())
-                    .map_err(|e| {
-                        SdkError::Ingestion(format!(
-                            "failed to decode RPC fallback metadata XDR for ledger {}: {e}",
-                            ledger.sequence
-                        ))
-                    })?;
+                let metadata =
+                    LedgerCloseMeta::from_xdr_base64(&ledger.metadata_xdr, Limits::none())
+                        .map_err(|e| {
+                            SdkError::Ingestion(format!(
+                                "failed to decode RPC fallback metadata XDR for ledger {}: {e}",
+                                ledger.sequence
+                            ))
+                        })?;
                 let raw_xdr = metadata.to_xdr(Limits::none()).map_err(|e| {
                     SdkError::Ingestion(format!(
                         "failed to re-encode RPC fallback metadata for ledger {}: {e}",
@@ -678,8 +699,7 @@ impl RpcLedgerCloseMetaRemoteSource {
                     ledger_sequence: Some(ledger.sequence),
                     source: IngestionSource::Remote,
                 })
-            },
-        )?;
+            })?;
         Ok(Self { inner })
     }
 }
@@ -732,12 +752,14 @@ async fn copy_directory(source: &Path, destination: &Path) -> Result<(), SdkErro
             if metadata.is_dir() {
                 stack.push_back((source_path, destination_path));
             } else if metadata.is_file() {
-                fs::copy(&source_path, &destination_path).await.map_err(|e| {
-                    SdkError::Ingestion(format!(
-                        "failed to copy '{}' into archive: {e}",
-                        source_path.display()
-                    ))
-                })?;
+                fs::copy(&source_path, &destination_path)
+                    .await
+                    .map_err(|e| {
+                        SdkError::Ingestion(format!(
+                            "failed to copy '{}' into archive: {e}",
+                            source_path.display()
+                        ))
+                    })?;
             }
         }
     }
@@ -792,11 +814,7 @@ mod tests {
 
     #[async_trait]
     impl CaptiveCoreBackend for FakeCaptiveCoreBackend {
-        async fn start(
-            &mut self,
-            start_ledger: u32,
-            _rendered_toml: &str,
-        ) -> Result<(), SdkError> {
+        async fn start(&mut self, start_ledger: u32, _rendered_toml: &str) -> Result<(), SdkError> {
             self.start_ledgers.push(start_ledger);
             self.active = self.epochs.pop_front().unwrap_or_default();
             self.running = true;
@@ -817,9 +835,14 @@ mod tests {
             }
         }
 
-        async fn archive_state(&mut self, archive_root: &Path) -> Result<Option<PathBuf>, SdkError> {
+        async fn archive_state(
+            &mut self,
+            archive_root: &Path,
+        ) -> Result<Option<PathBuf>, SdkError> {
             self.archive_count += 1;
-            Ok(Some(archive_root.join(format!("archive-{}", self.archive_count))))
+            Ok(Some(
+                archive_root.join(format!("archive-{}", self.archive_count)),
+            ))
         }
 
         async fn stop(&mut self) -> Result<(), SdkError> {
@@ -878,7 +901,9 @@ mod tests {
             ],
             vec![Ok(fake_frame(42))],
         ]);
-        let remote = FakeRemoteSource { ledgers: VecDeque::new() };
+        let remote = FakeRemoteSource {
+            ledgers: VecDeque::new(),
+        };
         let mut ingestor = CaptiveCoreIngestor::new(
             CaptiveCoreConfig {
                 start_ledger: 41,

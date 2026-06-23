@@ -669,7 +669,10 @@ mod tests {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             client.register(&label6, &owner, &1, &quote6.fee_stroops, &now);
         }));
-        assert!(result.is_err(), "Should hit rate limit after whitelist removal");
+        assert!(
+            result.is_err(),
+            "Should hit rate limit after whitelist removal"
+        );
     }
 
     #[test]
@@ -728,13 +731,7 @@ mod tests {
         for i in 0..5 {
             let label = String::from_str(&env, &format!("window2_{}", i));
             let quote = client.quote_registration(&label, &1, &future_window);
-            client.register(
-                &label,
-                &owner,
-                &1,
-                &quote.fee_stroops,
-                &future_window,
-            );
+            client.register(&label, &owner, &1, &quote.fee_stroops, &future_window);
         }
 
         let metrics = client.fee_metrics();

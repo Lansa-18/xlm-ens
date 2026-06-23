@@ -152,11 +152,7 @@ impl RegistrarContract {
             .set(&DataKey::ContractVersion, &CONTRACT_VERSION);
 
         // Initialize rate limit config with defaults if not already set
-        if !env
-            .storage()
-            .persistent()
-            .has(&DataKey::RateLimitConfig)
-        {
+        if !env.storage().persistent().has(&DataKey::RateLimitConfig) {
             let config = RateLimitConfig {
                 window_size_seconds: DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
                 max_registrations_per_window: DEFAULT_MAX_REGISTRATIONS_PER_WINDOW,
@@ -714,19 +710,12 @@ impl RegistrarContract {
         let config = Self::get_rate_limit_config(&env);
         let window_start = now_unix.saturating_sub(config.window_size_seconds);
         let key = DataKey::RegistrationWindow(address, window_start);
-        env.storage()
-            .persistent()
-            .get::<_, u64>(&key)
-            .unwrap_or(0)
+        env.storage().persistent().get::<_, u64>(&key).unwrap_or(0)
     }
 }
 
 /// Check if an address is within rate limits for a given time window
-fn check_rate_limit(
-    env: &Env,
-    address: &Address,
-    now_unix: u64,
-) -> Result<(), RegistrarError> {
+fn check_rate_limit(env: &Env, address: &Address, now_unix: u64) -> Result<(), RegistrarError> {
     // Check if address is whitelisted (bypass rate limit)
     if env
         .storage()
@@ -750,11 +739,7 @@ fn check_rate_limit(
     let window_start = now_unix.saturating_sub(config.window_size_seconds);
     let key = DataKey::RegistrationWindow(address.clone(), window_start);
 
-    let count = env
-        .storage()
-        .persistent()
-        .get::<_, u64>(&key)
-        .unwrap_or(0);
+    let count = env.storage().persistent().get::<_, u64>(&key).unwrap_or(0);
 
     // Check if we've exceeded the limit
     if count >= config.max_registrations_per_window {
@@ -783,11 +768,7 @@ fn record_registration(env: &Env, address: &Address, now_unix: u64) -> Result<()
     let window_start = now_unix.saturating_sub(config.window_size_seconds);
     let key = DataKey::RegistrationWindow(address.clone(), window_start);
 
-    let count = env
-        .storage()
-        .persistent()
-        .get::<_, u64>(&key)
-        .unwrap_or(0);
+    let count = env.storage().persistent().get::<_, u64>(&key).unwrap_or(0);
 
     env.storage()
         .persistent()

@@ -9,6 +9,7 @@ members = [
     "contracts/bridge",
     "packages/xlm-ns-sdk",
     "packages/xlm-ns-common",
+    "packages/xlm-ns-monitor",
     "cli",
     "tests",
 ]

@@ -148,6 +148,7 @@ pub fn is_retryable(err: &SdkError) -> bool {
         SdkError::TransactionTimeout { .. } => true,
         SdkError::Transport(message) => transport_is_retryable(message),
         SdkError::InvalidRequest(_)
+        | SdkError::Ingestion(_)
         | SdkError::ContractError(_)
         | SdkError::NetworkPassphraseMismatch { .. }
         | SdkError::TransactionPassphraseMismatch { .. }
@@ -230,7 +231,9 @@ mod tests {
             ledger_submitted: 42,
         }));
         assert!(!is_retryable(&SdkError::InvalidRequest("bad input".into())));
-        assert!(!is_retryable(&SdkError::ContractError(ContractErrorCode::NameNotFound)));
+        assert!(!is_retryable(&SdkError::ContractError(
+            ContractErrorCode::NameNotFound
+        )));
         assert!(!is_retryable(&SdkError::NetworkPassphraseMismatch {
             configured: "a".into(),
             rpc_reported: "b".into(),
