@@ -1,12 +1,15 @@
+#![allow(dead_code)]
 use crate::errors::SdkError;
 use stellar_rpc_client::Client;
 
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct GetNetworkResponse {
     pub passphrase: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct RpcResponse<T> {
     pub result: T,
 }

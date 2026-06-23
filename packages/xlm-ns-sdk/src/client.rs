@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::config::{ClientConfig, NetworkPreset};
 use crate::errors::{ContractErrorCode, SdkError};
 use crate::network;
@@ -12,6 +13,7 @@ use crate::types::{
 };
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::future::Future;
 use std::hash::{Hash as StdHash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 use stellar_rpc_client::Client;
@@ -132,6 +134,48 @@ impl XlmNsClient {
         self
     }
 
+    fn rpc_client(&self) -> Result<Client, SdkError> {
+        Client::new(&self.rpc_url)
+            .map_err(|e| SdkError::InvalidRequest(format!("failed to create RPC client: {e}")))
+    }
+
+    /// Runs `f` against a shared RPC client, retrying transient failures.
+    ///
+    /// A single [`Client`] is created up front; each attempt receives a cheap
+    /// [`Clone`] that reuses the underlying HTTP connection pool.
+    async fn execute_with_retry<T, F, Fut>(&self, operation: &str, f: F) -> Result<T, SdkError>
+    where
+        F: Fn(Client) -> Fut,
+        Fut: Future<Output = Result<T, SdkError>>,
+    {
+        use crate::errors::is_retryable;
+
+        let rpc = self.rpc_client()?;
+        let retry = &self.config.retry;
+        let mut attempt = 0u32;
+
+        loop {
+            match f(rpc.clone()).await {
+                Ok(value) => return Ok(value),
+                Err(err) if is_retryable(&err) && attempt < retry.max_retries => {
+                    let delay = retry.sleep_duration(attempt);
+                    tracing::debug!(
+                        operation = operation,
+                        attempt = attempt + 1,
+                        max_retries = retry.max_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        error = %err,
+                        error_detail = ?err,
+                        "rpc call failed; backing off before retry",
+                    );
+                    tokio::time::sleep(delay).await;
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
     fn configured_network_passphrase(&self) -> Result<&str, SdkError> {
         self.network_passphrase
             .as_deref()
@@ -139,10 +183,16 @@ impl XlmNsClient {
     }
 
     async fn verify_write_network(&self) -> Result<(), SdkError> {
-        let configured = self.configured_network_passphrase()?;
-        let rpc =
-            Client::new(&self.rpc_url).map_err(|e| SdkError::InvalidRequest(e.to_string()))?;
-        match network::verify_network_passphrase(configured, &self.rpc_url, &rpc).await {
+        let configured = self.configured_network_passphrase()?.to_owned();
+        let rpc_url = self.rpc_url.clone();
+        match self
+            .execute_with_retry("verify_network", |client| {
+                let configured = configured.clone();
+                let rpc_url = rpc_url.clone();
+                async move { network::verify_network_passphrase(&configured, &rpc_url, &client).await }
+            })
+            .await
+        {
             Ok(()) => Ok(()),
             // Hard-fail on mismatch — the transaction would hit the wrong network.
             Err(e @ SdkError::NetworkPassphraseMismatch { .. }) => Err(e),
@@ -215,11 +265,19 @@ impl XlmNsClient {
             return Ok(submission);
         };
 
-        let rpc = Client::new(&self.rpc_url)
-            .map_err(|e| SdkError::InvalidRequest(format!("failed to create RPC client: {e}")))?;
-
         let poll_timeout = Some(self.config.transaction_poll_timeout);
-        match rpc.get_transaction_polling(&tx_hash, poll_timeout).await {
+        match self
+            .execute_with_retry("hydrate_submission", |_client| {
+                let tx_hash = tx_hash.clone();
+                async move {
+                    _client
+                        .get_transaction_polling(&tx_hash, poll_timeout)
+                        .await
+                        .map_err(|e| SdkError::Transport(e.to_string()))
+                }
+            })
+            .await
+        {
             Ok(response) => {
                 let status = submission.status;
                 let mut hydrated = submission;
@@ -236,22 +294,35 @@ impl XlmNsClient {
     }
 
     pub async fn resolve(&self, name: &str) -> Result<ResolutionResult, SdkError> {
-        let rpc =
-            Client::new(&self.rpc_url).map_err(|e| SdkError::InvalidRequest(e.to_string()))?;
-        let registry_id =
+        let _registry_id =
             Self::require_contract_id(&self.registry_contract_id, "registry contract ID")?;
-
-        let entry = self.query_registry(&rpc, registry_id, name, 0).await?;
+        let resolver_contract_id = self.resolver_contract_id.clone();
+        let name = name.to_string();
+        let lookup_name = name.clone();
+        let entry = self
+            .execute_with_retry("query_registry", move |_client| {
+                let name = lookup_name.clone();
+                let resolver_contract_id = resolver_contract_id.clone();
+                async move { Ok(Self::mock_registry_entry(resolver_contract_id, &name, 0)) }
+            })
+            .await?;
 
         let mut result = ResolutionResult {
-            name: name.to_string(),
+            name,
             address: entry.target_address,
             resolver: entry.resolver.clone(),
             expires_at: Some(entry.expires_at),
         };
 
-        if let Some(resolver_id) = entry.resolver.clone() {
-            if let Some(record) = self.query_resolver(&rpc, &resolver_id, name, 0).await? {
+        if let Some(_resolver_id) = entry.resolver.clone() {
+            let resolver_name = result.name.clone();
+            if let Some(record) = self
+                .execute_with_retry("query_resolver", move |_client| {
+                    let resolver_name = resolver_name.clone();
+                    async move { Ok(Some(Self::mock_resolution_record(&resolver_name, 0))) }
+                })
+                .await?
+            {
                 result.address = Some(record.address);
             }
         }
@@ -260,12 +331,17 @@ impl XlmNsClient {
     }
 
     pub async fn get_registry_metadata(&self, name: &str) -> Result<NameRecord, SdkError> {
-        let rpc =
-            Client::new(&self.rpc_url).map_err(|e| SdkError::InvalidRequest(e.to_string()))?;
-        let registry_id =
+        let _registry_id =
             Self::require_contract_id(&self.registry_contract_id, "registry contract ID")?;
-
-        let entry = self.query_registry(&rpc, registry_id, name, 0).await?;
+        let resolver_contract_id = self.resolver_contract_id.clone();
+        let name = name.to_string();
+        let entry = self
+            .execute_with_retry("query_registry", move |_client| {
+                let name = name.clone();
+                let resolver_contract_id = resolver_contract_id.clone();
+                async move { Ok(Self::mock_registry_entry(resolver_contract_id, &name, 0)) }
+            })
+            .await?;
 
         Ok(NameRecord {
             owner: entry.owner,
@@ -300,6 +376,34 @@ impl XlmNsClient {
         ])
     }
 
+    fn mock_registry_entry(
+        resolver_contract_id: Option<String>,
+        name: &str,
+        ledger: u32,
+    ) -> RegistryEntry {
+        RegistryEntry {
+            name: name.to_string(),
+            owner: "GDRA...OWNER".to_string(),
+            resolver: resolver_contract_id.or(Some("CDAD...RESOLVER".to_string())),
+            target_address: Some("GDRA...TARGET".to_string()),
+            metadata_uri: None,
+            ttl_seconds: 3600,
+            registered_at: MOCK_REFERENCE_TIMESTAMP.saturating_add(u64::from(ledger)),
+            expires_at: MOCK_REFERENCE_TIMESTAMP + SECONDS_PER_YEAR,
+            grace_period_ends_at: MOCK_REFERENCE_TIMESTAMP + SECONDS_PER_YEAR + GRACE_PERIOD_SECONDS,
+            transfer_count: 0,
+        }
+    }
+
+    fn mock_resolution_record(name: &str, ledger: u32) -> ResolutionRecord {
+        ResolutionRecord {
+            owner: "GDRA...OWNER".to_string(),
+            address: format!("GDRA...RESOLVED_ADDR:{name}:{ledger}"),
+            text_records: make_text_records(name),
+            updated_at: MOCK_REFERENCE_TIMESTAMP,
+        }
+    }
+
     async fn query_registry(
         &self,
         _client: &Client,
@@ -307,23 +411,11 @@ impl XlmNsClient {
         name: &str,
         ledger: u32,
     ) -> Result<RegistryEntry, SdkError> {
-        Ok(RegistryEntry {
-            name: name.to_string(),
-            owner: "GDRA...OWNER".to_string(),
-            resolver: self
-                .resolver_contract_id
-                .clone()
-                .or(Some("CDAD...RESOLVER".to_string())),
-            target_address: Some("GDRA...TARGET".to_string()),
-            metadata_uri: None,
-            ttl_seconds: 3600,
-            registered_at: MOCK_REFERENCE_TIMESTAMP.saturating_add(u64::from(ledger)),
-            expires_at: MOCK_REFERENCE_TIMESTAMP + SECONDS_PER_YEAR,
-            grace_period_ends_at: MOCK_REFERENCE_TIMESTAMP
-                + SECONDS_PER_YEAR
-                + GRACE_PERIOD_SECONDS,
-            transfer_count: 0,
-        })
+        Ok(Self::mock_registry_entry(
+            self.resolver_contract_id.clone(),
+            name,
+            ledger,
+        ))
     }
 
     async fn query_resolver(
@@ -333,12 +425,7 @@ impl XlmNsClient {
         name: &str,
         ledger: u32,
     ) -> Result<Option<ResolutionRecord>, SdkError> {
-        Ok(Some(ResolutionRecord {
-            owner: "GDRA...OWNER".to_string(),
-            address: format!("GDRA...RESOLVED_ADDR:{name}:{ledger}"),
-            text_records: make_text_records(name),
-            updated_at: MOCK_REFERENCE_TIMESTAMP,
-        }))
+        Ok(Some(Self::mock_resolution_record(name, ledger)))
     }
 
     pub async fn get_registration(&self, name: &str) -> Result<Option<ResolutionResult>, SdkError> {
@@ -371,7 +458,7 @@ impl XlmNsClient {
             ));
         }
 
-        let all_items = vec![
+        let all_items = [
             ResolutionResult {
                 name: "alice.xlm".to_string(),
                 address: Some(owner.to_string()),
@@ -1210,9 +1297,8 @@ impl XlmNsClient {
     }
 
     async fn rpc_context(&self) -> Result<(Client, u32, String), SdkError> {
-        let rpc = Client::new(&self.rpc_url)
-            .map_err(|e| SdkError::InvalidRequest(format!("failed to create RPC client: {e}")))?;
         let passphrase = self.network_passphrase.clone().unwrap_or_default();
+        let rpc = self.rpc_client()?;
         Ok((rpc, 0u32, passphrase))
     }
 

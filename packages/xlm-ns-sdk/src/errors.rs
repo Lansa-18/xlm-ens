@@ -141,3 +141,108 @@ pub fn decode_error(code: u32) -> ContractErrorCode {
         _ => ContractErrorCode::Other,
     }
 }
+
+/// Returns `true` when an RPC call may be retried with exponential backoff.
+pub fn is_retryable(err: &SdkError) -> bool {
+    match err {
+        SdkError::TransactionTimeout { .. } => true,
+        SdkError::Transport(message) => transport_is_retryable(message),
+        SdkError::InvalidRequest(_)
+        | SdkError::ContractError(_)
+        | SdkError::NetworkPassphraseMismatch { .. }
+        | SdkError::TransactionPassphraseMismatch { .. }
+        | SdkError::ContractInvocationFailed { .. }
+        | SdkError::SimulationFailed { .. }
+        | SdkError::InsufficientFee { .. }
+        | SdkError::SigningFailed { .. } => false,
+    }
+}
+
+fn transport_is_retryable(message: &str) -> bool {
+    let msg = message.to_ascii_lowercase();
+
+    // Configuration / parsing failures are permanent.
+    if msg.contains("invalid rpc url")
+        || msg.contains("json decoding error")
+        || msg.contains("invalid response from server")
+    {
+        return false;
+    }
+
+    // HTTP rate limiting and server-side transient failures.
+    if msg.contains("429")
+        || msg.contains("too many requests")
+        || msg.contains("rate limit")
+        || msg.contains("500")
+        || msg.contains("502")
+        || msg.contains("503")
+        || msg.contains("504")
+        || msg.contains("service unavailable")
+    {
+        return true;
+    }
+
+    // Network-level blips.
+    for marker in [
+        "timeout",
+        "timed out",
+        "connection refused",
+        "connection reset",
+        "connection closed",
+        "broken pipe",
+        "network unreachable",
+        "dns error",
+        "temporary failure",
+        "failed to send",
+        "error sending request",
+        "error trying to connect",
+    ] {
+        if msg.contains(marker) {
+            return true;
+        }
+    }
+
+    // Unclassified transport errors default to retryable.
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_retryable_only_for_transient_errors() {
+        assert!(is_retryable(&SdkError::Transport("timeout".into())));
+        assert!(is_retryable(&SdkError::Transport(
+            "http error: status 503 service unavailable".into()
+        )));
+        assert!(is_retryable(&SdkError::Transport(
+            "too many requests (429)".into()
+        )));
+        assert!(is_retryable(&SdkError::Transport(
+            "connection refused".into()
+        )));
+        assert!(!is_retryable(&SdkError::Transport(
+            "invalid rpc url: bad://".into()
+        )));
+        assert!(is_retryable(&SdkError::TransactionTimeout {
+            operation: "register",
+            ledger_submitted: 42,
+        }));
+        assert!(!is_retryable(&SdkError::InvalidRequest("bad input".into())));
+        assert!(!is_retryable(&SdkError::ContractError(ContractErrorCode::NameNotFound)));
+        assert!(!is_retryable(&SdkError::NetworkPassphraseMismatch {
+            configured: "a".into(),
+            rpc_reported: "b".into(),
+        }));
+        assert!(!is_retryable(&SdkError::SimulationFailed {
+            operation: "register",
+            reason: "revert".into(),
+        }));
+        assert!(!is_retryable(&SdkError::ContractInvocationFailed {
+            operation: "register",
+            reason: "revert".into(),
+            tx_hash: None,
+        }));
+    }
+}

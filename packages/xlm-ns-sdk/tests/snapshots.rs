@@ -4,7 +4,7 @@ use xlm_ns_sdk::XlmNsClient;
 #[tokio::test]
 async fn test_register_snapshot() {
     // Deterministic snapshot of registration transaction
-    let client = XlmNsClient::new(
+    let _client = XlmNsClient::new(
         "https://soroban-testnet.stellar.org",
         None,
         Some("REGISTRY111".to_string()),

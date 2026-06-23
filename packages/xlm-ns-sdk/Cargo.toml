@@ -17,5 +17,10 @@ stellar-strkey = "0.0.13"
 async-trait = "0.1"
 tracing = "0.1"
 
+# Added for retry logic with exponential backoff
+tracing = "0.1"
+rand = { version = "0.8", features = ["std", "std_rng"] }
+
 [dev-dependencies]
 wiremock = "0.6"
+tokio = { version = "1", features = ["test-util"] }

@@ -8,7 +8,7 @@
 //! Defaults are tuned for interactive workloads:
 //! - 30 s request timeout
 //! - 3 retry attempts on transient transport failures
-//! - 250 ms initial backoff with exponential growth (capped at 5 s)
+//! - 1 s initial backoff with exponential growth (capped at 30 s)
 //! - 60 s transaction polling window for write-path hydration
 //! - User-agent of `xlm-ns-sdk/<crate-version>`
 //!
@@ -17,6 +17,8 @@
 
 use std::time::Duration;
 
+use rand::Rng;
+
 /// Default per-request timeout when calling Soroban RPC.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -24,10 +26,10 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_RETRIES: u32 = 3;
 
 /// Default initial backoff delay between retries.
-pub const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_millis(250);
+pub const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 
 /// Default upper bound on the exponential backoff delay.
-pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(5);
+pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(30);
 
 /// Default amount of time the SDK will wait for a submitted transaction to
 /// reach a terminal state when final-status hydration is enabled.
@@ -49,6 +51,8 @@ pub struct RetryConfig {
     pub initial_backoff: Duration,
     /// Upper bound on the backoff delay between retries.
     pub max_backoff: Duration,
+    /// When true, apply full jitter: sleep uniformly in `[0, backoff]`.
+    pub jitter: bool,
 }
 
 impl RetryConfig {
@@ -59,12 +63,13 @@ impl RetryConfig {
             max_retries: 0,
             initial_backoff: Duration::from_millis(0),
             max_backoff: Duration::from_millis(0),
+            jitter: false,
         }
     }
 
-    /// Returns the backoff for retry attempt `attempt` (1-indexed), capped at
-    /// [`max_backoff`](Self::max_backoff). `attempt = 0` returns the initial
-    /// delay so callers can use it for the first retry.
+    /// Returns the base backoff for retry attempt `attempt` (0-indexed), capped
+    /// at [`max_backoff`](Self::max_backoff). `attempt = 0` is the delay
+    /// before the first retry.
     pub fn backoff_for(&self, attempt: u32) -> Duration {
         if self.max_retries == 0 {
             return Duration::from_millis(0);
@@ -76,6 +81,21 @@ impl RetryConfig {
             .unwrap_or(self.max_backoff);
         delay.min(self.max_backoff)
     }
+
+    /// Returns the duration to sleep before the next retry. With jitter enabled
+    /// this uses full jitter: a uniform random delay in `[0, backoff_for(attempt)]`.
+    pub fn sleep_duration(&self, attempt: u32) -> Duration {
+        let base = self.backoff_for(attempt);
+        if !self.jitter || base.is_zero() {
+            return base;
+        }
+        let millis = base.as_millis().min(u128::from(u64::MAX)) as u64;
+        if millis == 0 {
+            return Duration::ZERO;
+        }
+        // Full jitter: uniform in [0, base].
+        Duration::from_millis(rand::thread_rng().gen_range(0..=millis))
+    }
 }
 
 impl Default for RetryConfig {
@@ -84,6 +104,7 @@ impl Default for RetryConfig {
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff: DEFAULT_INITIAL_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
+            jitter: true,
         }
     }
 }
@@ -138,6 +159,21 @@ impl ClientConfig {
     /// Override [`RetryConfig::max_retries`].
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.retry.max_retries = max_retries;
+        self
+    }
+
+    pub fn with_initial_backoff(mut self, initial_backoff: Duration) -> Self {
+        self.retry.initial_backoff = initial_backoff;
+        self
+    }
+
+    pub fn with_max_backoff(mut self, max_backoff: Duration) -> Self {
+        self.retry.max_backoff = max_backoff;
+        self
+    }
+
+    pub fn with_jitter(mut self, enabled: bool) -> Self {
+        self.retry.jitter = enabled;
         self
     }
 
@@ -210,6 +246,7 @@ mod tests {
         assert_eq!(config.retry.max_retries, DEFAULT_MAX_RETRIES);
         assert_eq!(config.retry.initial_backoff, DEFAULT_INITIAL_BACKOFF);
         assert_eq!(config.retry.max_backoff, DEFAULT_MAX_BACKOFF);
+        assert!(config.retry.jitter);
         assert!(config.user_agent.starts_with("xlm-ns-sdk/"));
         assert!(config.poll_final_status);
         assert_eq!(
@@ -221,13 +258,13 @@ mod tests {
     #[test]
     fn chainable_setters_override_individual_fields() {
         let config = ClientConfig::default()
-            .with_timeout(Duration::from_secs(5))
+            .with_timeout(Duration::from_secs(30))
             .with_max_retries(7)
             .with_user_agent("svc/0.1")
             .with_poll_final_status(false)
             .with_transaction_poll_timeout(Duration::from_secs(3));
 
-        assert_eq!(config.timeout, Duration::from_secs(5));
+        assert_eq!(config.timeout, Duration::from_secs(30));
         assert_eq!(config.retry.max_retries, 7);
         assert_eq!(config.user_agent, "svc/0.1");
         assert!(!config.poll_final_status);
@@ -247,6 +284,7 @@ mod tests {
             max_retries: 8,
             initial_backoff: Duration::from_millis(100),
             max_backoff: Duration::from_millis(1_000),
+            jitter: false,
         };
 
         assert_eq!(policy.backoff_for(0), Duration::from_millis(100));
@@ -256,5 +294,32 @@ mod tests {
         // capped at max_backoff
         assert_eq!(policy.backoff_for(4), Duration::from_millis(1_000));
         assert_eq!(policy.backoff_for(20), Duration::from_millis(1_000));
+    }
+
+    #[test]
+    fn sleep_duration_without_jitter_matches_backoff() {
+        let policy = RetryConfig {
+            max_retries: 3,
+            initial_backoff: Duration::from_millis(200),
+            max_backoff: Duration::from_secs(5),
+            jitter: false,
+        };
+        assert_eq!(policy.sleep_duration(1), Duration::from_millis(400));
+    }
+
+    #[test]
+    fn sleep_duration_with_jitter_stays_within_bounds() {
+        let policy = RetryConfig {
+            max_retries: 3,
+            initial_backoff: Duration::from_millis(500),
+            max_backoff: Duration::from_secs(5),
+            jitter: true,
+        };
+        for _ in 0..32 {
+            let delay = policy.sleep_duration(0);
+            assert!(delay <= Duration::from_millis(500));
+        }
+        // Full jitter can be zero.
+        assert!(policy.sleep_duration(0) <= Duration::from_millis(500));
     }
 }

@@ -1,3 +1,7 @@
+#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match, clippy::duplicated_attributes)]
+#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match, clippy::duplicated_attributes)]
+#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]
+#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]
 #[cfg(test)]
 mod tests {
     use crate::client::XlmNsClient;
@@ -8,6 +12,9 @@ mod tests {
         TransferRequest,
     };
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
     use stellar_rpc_client::Client;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
@@ -32,6 +39,42 @@ mod tests {
                 "result": self.result,
             }))
         }
+    }
+
+    /// Returns HTTP errors for the first N requests, then a JSON-RPC success body.
+    struct FailThenSucceed {
+        failures_before_success: Arc<AtomicUsize>,
+        success_body: serde_json::Value,
+    }
+
+    impl Respond for FailThenSucceed {
+        fn respond(&self, request: &Request) -> ResponseTemplate {
+            let remaining = self.failures_before_success.fetch_sub(1, Ordering::SeqCst);
+            if remaining > 0 {
+                ResponseTemplate::new(503)
+            } else {
+                JsonRpcResponder::new(self.success_body.clone()).respond(request)
+            }
+        }
+    }
+
+    fn retry_test_client(
+        rpc_url: impl Into<String>,
+        config: crate::config::ClientConfig,
+    ) -> XlmNsClient {
+        XlmNsClient::builder(rpc_url)
+            .network_passphrase("Test SDF Network ; September 2015")
+            .registry(REGISTRY_ID)
+            .registrar(REGISTRAR_ID)
+            .config(config)
+            .build()
+    }
+
+    fn network_success_body() -> serde_json::Value {
+        serde_json::json!({
+            "passphrase": "Test SDF Network ; September 2015",
+            "protocolVersion": 21
+        })
     }
 
     // Valid 56-char Stellar contract IDs (C-prefix, all alphanumeric).
@@ -784,4 +827,120 @@ mod tests {
         assert!(c.subdomain_contract_id.is_some());
         assert!(c.nft_contract_id.is_some());
     }
+
+    // Issue #486 — RPC retry with exponential backoff
+
+    #[tokio::test]
+    async fn retry_succeeds_after_transient_transport_failures() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(FailThenSucceed {
+                failures_before_success: Arc::new(AtomicUsize::new(2)),
+                success_body: network_success_body(),
+            })
+            .expect(3)
+            .mount(&mock_server)
+            .await;
+
+        let client = retry_test_client(
+            mock_server.uri(),
+            crate::config::ClientConfig::default()
+                .with_max_retries(3)
+                .with_initial_backoff(Duration::from_millis(1))
+                .with_jitter(false)
+                .with_poll_final_status(false),
+        );
+
+        let receipt = client
+            .renew(RenewalRequest {
+                name: "retry.xlm".into(),
+                additional_years: 1,
+                signer: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(receipt.name, "retry.xlm");
+    }
+
+    #[tokio::test]
+    async fn retry_does_not_retry_non_retryable_passphrase_mismatch() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(JsonRpcResponder::new(serde_json::json!({
+                "passphrase": "Public Global Stellar Network ; September 2015",
+                "protocolVersion": 21
+            })))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let client = retry_test_client(
+            mock_server.uri(),
+            crate::config::ClientConfig::default()
+                .with_max_retries(3)
+                .with_initial_backoff(Duration::from_millis(1))
+                .with_jitter(false)
+                .with_poll_final_status(false),
+        );
+
+        let err = client
+            .renew(RenewalRequest {
+                name: "retry.xlm".into(),
+                additional_years: 1,
+                signer: None,
+            })
+            .await
+            .unwrap_err();
+
+        match err {
+            SdkError::NetworkPassphraseMismatch { .. } => {}
+            other => panic!("expected passphrase mismatch, got {other:?}"),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn retry_honors_exponential_backoff_delays() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(FailThenSucceed {
+                failures_before_success: Arc::new(AtomicUsize::new(2)),
+                success_body: network_success_body(),
+            })
+            .mount(&mock_server)
+            .await;
+
+        let client = retry_test_client(
+            mock_server.uri(),
+            crate::config::ClientConfig::default()
+                .with_max_retries(3)
+                .with_initial_backoff(Duration::from_millis(100))
+                .with_jitter(false)
+                .with_poll_final_status(false),
+        );
+
+        let renew = client.renew(RenewalRequest {
+            name: "retry.xlm".into(),
+            additional_years: 1,
+            signer: None,
+        });
+        tokio::pin!(renew);
+
+        tokio::select! {
+            _ = &mut renew => panic!("renew finished before first backoff elapsed"),
+            _ = tokio::time::sleep(Duration::from_millis(99)) => {}
+        }
+
+        tokio::select! {
+            _ = &mut renew => panic!("renew finished before second backoff elapsed"),
+            _ = tokio::time::sleep(Duration::from_millis(201)) => {}
+        }
+
+        let result = renew.await.unwrap();
+        assert_eq!(result.name, "retry.xlm");
+    }
 }
+#![allow(dead_code, unused_variables, clippy::module_inception, clippy::single_match)]

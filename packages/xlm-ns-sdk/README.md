@@ -22,8 +22,9 @@ Transport-level controls live on `ClientConfig`:
 |---|---|---|
 | `timeout` | `30s` | Per-request timeout. Bounds a single RPC call (not the total wall-clock across retries). |
 | `retry.max_retries` | `3` | Number of retry attempts on transient transport errors. `0` disables retries. |
-| `retry.initial_backoff` | `250ms` | Initial delay before the first retry; doubles per attempt. |
-| `retry.max_backoff` | `5s` | Cap on the exponential backoff delay. |
+| `retry.initial_backoff` | `1s` | Initial delay before the first retry; doubles per attempt. |
+| `retry.max_backoff` | `30s` | Cap on the exponential backoff delay. |
+| `retry.jitter` | `true` | Randomize each retry delay uniformly in `[0, backoff]`. |
 | `user_agent` | `xlm-ns-sdk/<crate-version>` | Sent as the HTTP `User-Agent` so operators can identify SDK traffic in upstream logs. |
 
 Override anything with the chainable setters:
