@@ -323,4 +323,141 @@ mod tests {
         let client = AuctionContractClient::new(&env, &contract_id);
         assert_eq!(client.version(), 1);
     }
+
+    // ── #433: auction admin cancellation ──────────────────────────────────
+
+    fn setup_with_admin(
+        env: &Env,
+    ) -> (
+        AuctionContractClient<'_>,
+        Address,
+        Address,
+        Address,
+        token::StellarAssetClient<'_>,
+        Address,
+    ) {
+        env.mock_all_auths();
+        let contract_id = env.register(AuctionContract, ());
+        let client = AuctionContractClient::new(env, &contract_id);
+        let admin = Address::generate(env);
+        client.initialize(&admin);
+        let (asset, token_admin, _) = setup_token(env);
+        let treasury = Address::generate(env);
+        (client, contract_id, admin, asset, token_admin, treasury)
+    }
+
+    #[test]
+    fn cancel_auction_cancels_zero_bid_auction() {
+        let env = Env::default();
+        let (client, _, _, asset, _, treasury) = setup_with_admin(&env);
+
+        let name = String::from_str(&env, "rare.xlm");
+        let reason = String::from_str(&env, "reserved for partner");
+        client.create_auction(&name, &asset, &treasury, &500, &100, &200);
+
+        client.cancel_auction(&name, &reason, &50);
+
+        let record = client.cancellation(&name).expect("cancellation record");
+        assert_eq!(record.cancelled_at, 50);
+        assert_eq!(record.reason, reason);
+
+        let cancelled = client.list_cancelled_auctions(&0, &10);
+        assert_eq!(cancelled.len(), 1);
+        assert_eq!(cancelled.get_unchecked(0), name);
+
+        // Cancelled auction must not appear as active.
+        let active = client.active_auctions(&150);
+        assert_eq!(active.len(), 0);
+
+        let active_list = client.list_active_auctions(&150, &0, &10);
+        assert_eq!(active_list.len(), 0);
+    }
+
+    #[test]
+    fn cancel_auction_rejected_when_bids_exist() {
+        let env = Env::default();
+        let (client, _, _, asset, token_admin, treasury) = setup_with_admin(&env);
+
+        let bidder = Address::generate(&env);
+        token_admin.mint(&bidder, &1000);
+
+        let name = String::from_str(&env, "hotname.xlm");
+        let reason = String::from_str(&env, "error");
+        client.create_auction(&name, &asset, &treasury, &100, &10, &200);
+        client.place_bid(&name, &bidder, &200, &15);
+
+        let result = client.try_cancel_auction(&name, &reason, &50);
+        assert!(matches!(
+            result,
+            Err(Ok(crate::AuctionError::AuctionHasBids))
+        ));
+    }
+
+    #[test]
+    fn cancel_auction_rejected_when_already_cancelled() {
+        let env = Env::default();
+        let (client, _, _, asset, _, treasury) = setup_with_admin(&env);
+
+        let name = String::from_str(&env, "dupe.xlm");
+        let reason = String::from_str(&env, "mistake");
+        client.create_auction(&name, &asset, &treasury, &100, &10, &200);
+        client.cancel_auction(&name, &reason, &50);
+
+        let result = client.try_cancel_auction(&name, &reason, &51);
+        assert!(matches!(
+            result,
+            Err(Ok(crate::AuctionError::AlreadyCancelled))
+        ));
+    }
+
+    #[test]
+    fn cancel_auction_rejected_when_already_settled() {
+        let env = Env::default();
+        let (client, _, _, asset, _, treasury) = setup_with_admin(&env);
+
+        let name = String::from_str(&env, "settled.xlm");
+        let reason = String::from_str(&env, "too late");
+        client.create_auction(&name, &asset, &treasury, &100, &10, &20);
+        // settle with no bids (returns None, no Settlement record stored)
+        // need a bid to get a settlement record written
+        // use reserve_price=0 so any bid wins and settlement is written
+        let name2 = String::from_str(&env, "sold.xlm");
+        let (asset2, token_admin2, _) = setup_token(&env);
+        let bidder = Address::generate(&env);
+        token_admin2.mint(&bidder, &1000);
+        client.create_auction(&name2, &asset2, &treasury, &0, &10, &20);
+        client.place_bid(&name2, &bidder, &100, &15);
+        client.settle(&name2, &21);
+
+        let result = client.try_cancel_auction(&name2, &reason, &50);
+        assert!(matches!(
+            result,
+            Err(Ok(crate::AuctionError::AlreadySettled))
+        ));
+    }
+
+    #[test]
+    fn threat_cancel_auction_requires_admin() {
+        let env = Env::default();
+        // Do NOT call env.mock_all_auths() — auth must be enforced for cancel.
+        let contract_id = env.register(AuctionContract, ());
+        let client = AuctionContractClient::new(&env, &contract_id);
+
+        // initialize() doesn't require auth — call it without mocking.
+        let admin = Address::generate(&env);
+        client.initialize(&admin);
+
+        let asset = Address::generate(&env);
+        let treasury = Address::generate(&env);
+        let name = String::from_str(&env, "secret.xlm");
+        client.create_auction(&name, &asset, &treasury, &100, &10, &200);
+
+        // cancel_auction requires admin auth — must panic without it.
+        let name2 = name.clone();
+        let reason = String::from_str(&env, "unauthorized attempt");
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.cancel_auction(&name2, &reason, &50);
+        }));
+        assert!(result.is_err(), "cancel_auction must require admin auth");
+    }
 }

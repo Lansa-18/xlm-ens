@@ -1,8 +1,8 @@
 mod test;
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, symbol_short, token,
-    Address, Bytes, Env, String, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, token,
+    Address, Bytes, BytesN, Env, String, Vec,
 };
 use xlm_ns_common::soroban::validate_fqdn_soroban;
 use xlm_ns_common::time::is_time_window_open;
@@ -27,6 +27,14 @@ pub struct Settlement {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]
+pub struct Cancellation {
+    pub cancelled_at: u64,
+    pub reason: String,
+    pub admin: Address,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
 pub struct Auction {
     pub name: String,
     pub reserve_price: u64,
@@ -47,6 +55,7 @@ enum DataKey {
     AuctionNames,
     Admin,
     ContractVersion,
+    Cancelled(String),
 }
 
 /// Bounded result window for auction discovery queries (#157).
@@ -66,18 +75,143 @@ pub enum AuctionError {
     AlreadySettled = 7,
     InvalidBid = 8,
     UpgradeFailed = 9,
+    AuctionHasBids = 10,
+    AlreadyCancelled = 11,
 }
 
 pub const CONTRACT_VERSION: u32 = 1;
 
 #[contractevent]
-#[contracttype]
-            (current_version, target_version, admin),
-        );
+pub struct ContractUpgraded {
+    pub old_version: u32,
+    pub new_version: u32,
+    pub admin: Address,
+}
+
+#[contractevent]
+pub struct AuctionCancelled {
+    pub name: String,
+    pub admin: Address,
+    pub reason: String,
+}
+
+#[contract]
+pub struct AuctionContract;
+
+#[contractimpl]
+impl AuctionContract {
+    pub fn version(_env: Env) -> u32 {
+        CONTRACT_VERSION
+    }
+
+    pub fn initialize(env: Env, admin: Address) -> Result<(), AuctionError> {
+        if env.storage().instance().has(&DataKey::Admin) {
+            return Err(AuctionError::AlreadyExists);
+        }
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage()
+            .persistent()
+            .set(&DataKey::ContractVersion, &CONTRACT_VERSION);
+        Ok(())
+    }
+
+    pub fn get_version(env: Env) -> u32 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::ContractVersion)
+            .unwrap_or(CONTRACT_VERSION)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        new_wasm_hash: BytesN<32>,
+        migration_data: Bytes,
+    ) -> Result<(), AuctionError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuctionError::UpgradeFailed)?;
+        admin.require_auth();
+
+        let current_version = Self::get_version(env.clone());
+        let target_version = decode_target_version(&migration_data);
+
+        for v in current_version..target_version {
+            migrate(v, v + 1, &migration_data);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::ContractVersion, &target_version);
+
+        ContractUpgraded {
+            old_version: current_version,
+            new_version: target_version,
+            admin,
+        }
+        .publish(&env);
 
         env.deployer().update_current_contract_wasm(new_wasm_hash);
 
         Ok(())
+    }
+
+    pub fn cancel_auction(
+        env: Env,
+        name: String,
+        reason: String,
+        now_unix: u64,
+    ) -> Result<(), AuctionError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(AuctionError::UpgradeFailed)?;
+        admin.require_auth();
+
+        let auction = get_auction(&env, &name)?;
+
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Settlement(name.clone()))
+        {
+            return Err(AuctionError::AlreadySettled);
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Cancelled(name.clone()))
+        {
+            return Err(AuctionError::AlreadyCancelled);
+        }
+        if !auction.bids.is_empty() {
+            return Err(AuctionError::AuctionHasBids);
+        }
+
+        env.storage().persistent().set(
+            &DataKey::Cancelled(name.clone()),
+            &Cancellation {
+                cancelled_at: now_unix,
+                reason: reason.clone(),
+                admin: admin.clone(),
+            },
+        );
+
+        AuctionCancelled {
+            name,
+            admin,
+            reason,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    pub fn cancellation(env: Env, name: String) -> Option<Cancellation> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Cancelled(name))
     }
 
     pub fn create_auction(
@@ -145,6 +279,13 @@ pub const CONTRACT_VERSION: u32 = 1;
                 .storage()
                 .persistent()
                 .has(&DataKey::Settlement(name.clone()))
+            {
+                continue;
+            }
+            if env
+                .storage()
+                .persistent()
+                .has(&DataKey::Cancelled(name.clone()))
             {
                 continue;
             }
@@ -290,7 +431,7 @@ pub const CONTRACT_VERSION: u32 = 1;
     }
 
     /// Filter: names of auctions currently accepting bids at `now_unix`
-    /// (i.e. `starts_at <= now_unix <= ends_at`) and not yet settled.
+    /// (i.e. `starts_at <= now_unix <= ends_at`) and not yet settled or cancelled.
     /// Ordering: creation order. Bounded by `MAX_PAGE_SIZE`.
     pub fn list_active_auctions(env: Env, now_unix: u64, offset: u32, limit: u32) -> Vec<String> {
         filter_index(&env, offset, limit, |env, name| {
@@ -298,6 +439,13 @@ pub const CONTRACT_VERSION: u32 = 1;
                 .storage()
                 .persistent()
                 .has(&DataKey::Settlement(name.clone()))
+            {
+                return false;
+            }
+            if env
+                .storage()
+                .persistent()
+                .has(&DataKey::Cancelled(name.clone()))
             {
                 return false;
             }
@@ -309,6 +457,16 @@ pub const CONTRACT_VERSION: u32 = 1;
                 Some(a) => a.starts_at <= now_unix && now_unix <= a.ends_at,
                 None => false,
             }
+        })
+    }
+
+    /// Filter: names of auctions that have been cancelled.
+    /// Ordering: creation order. Bounded by `MAX_PAGE_SIZE`.
+    pub fn list_cancelled_auctions(env: Env, offset: u32, limit: u32) -> Vec<String> {
+        filter_index(&env, offset, limit, |env, name| {
+            env.storage()
+                .persistent()
+                .has(&DataKey::Cancelled(name.clone()))
         })
     }
 
