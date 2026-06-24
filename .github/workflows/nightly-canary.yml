@@ -33,3 +33,71 @@ jobs:
           name: canary-log-${{ matrix.name }}-${{ github.run_id }}
           path: canary-results.ndjson
           retention-days: 90
+
+  alerting:
+    needs: canary
+    if: failure()
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: testnet
+          - name: mainnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download canary log
+        uses: actions/download-artifact@v4
+        with:
+          name: canary-log-${{ matrix.name }}-${{ github.run_id }}
+          path: .
+
+      - name: Parse canary log
+        id: parse_log
+        run: |
+          node scripts/canary/parse-canary-log.js canary-results.ndjson
+      
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: 'C12345678' # Replace with your channel ID
+          slack-message: "🚨 Canary test failed on ${{ matrix.name }}!\n*Summary*: ${{ steps.parse_log.outputs.summary }}\n*Details*:\n${{ steps.parse_log.outputs.details }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View CI Run>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+      - name: Send PagerDuty notification
+        if: steps.parse_log.outputs.severity == 'critical'
+        uses: peter-evans/pagerduty-action@v1.0.0
+        with:
+          token: ${{ secrets.PAGERDUTY_API_KEY }}
+          payload: |
+            {
+              "payload": {
+                "summary": "🚨 Critical Canary Test Failure on ${{ matrix.name }}: ${{ steps.parse_log.outputs.summary }}",
+                "severity": "critical",
+                "source": "GitHub Actions",
+                "component": "xlm-ens",
+                "group": "canary-tests",
+                "custom_details": {
+                  "Details": "${{ steps.parse_log.outputs.details }}",
+                  "CI Run": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View CI Run>"
+                }
+              },
+              "routing_key": "${{ secrets.PAGERDUTY_ROUTING_KEY }}",
+              "event_action": "trigger"
+            }
+
+      - name: Create GitHub issue
+        uses: peter-evans/create-issue@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "🚨 Canary Test Failure on ${{ matrix.name }}"
+          body: |
+            **Summary**: ${{ steps.parse_log.outputs.summary }}
+            **Details**:
+            ${{ steps.parse_log.outputs.details }}
+            **CI Run**: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View CI Run>
+          labels: bug, canary-failure
