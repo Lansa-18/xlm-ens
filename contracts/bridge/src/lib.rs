@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 mod axelar;
 mod test;
 
@@ -198,15 +198,31 @@ fn target_for_chain(env: &Env, chain: &String) -> Option<BridgeRoute> {
     }
 }
 
+fn soroban_str_to_bytes(s: &String) -> [u8; 256] {
+    let mut buf = [0u8; 256];
+    let len = s.len() as usize;
+    if len > 0 && len <= 256 {
+        s.copy_into_slice(&mut buf[..len]);
+    }
+    buf
+}
+
 fn build_forward_gmp_message(
     env: &Env,
     name: &String,
     destination_chain: &String,
     resolver: &String,
 ) -> String {
+    let name_bytes = soroban_str_to_bytes(name);
+    let chain_bytes = soroban_str_to_bytes(destination_chain);
+    let resolver_bytes = soroban_str_to_bytes(resolver);
     String::from_str(
         env,
-        &axelar::build_forward_gmp_message(name, destination_chain, resolver),
+        &axelar::build_forward_gmp_message(
+            &name_bytes[..name.len() as usize],
+            &chain_bytes[..destination_chain.len() as usize],
+            &resolver_bytes[..resolver.len() as usize],
+        ),
     )
 }
 
@@ -217,9 +233,18 @@ fn build_reverse_gmp_message(
     destination_chain: &String,
     resolver: &String,
 ) -> String {
+    let addr_bytes = soroban_str_to_bytes(address);
+    let name_bytes = soroban_str_to_bytes(primary_name);
+    let chain_bytes = soroban_str_to_bytes(destination_chain);
+    let resolver_bytes = soroban_str_to_bytes(resolver);
     String::from_str(
         env,
-        &axelar::build_reverse_gmp_message(address, primary_name, destination_chain, resolver),
+        &axelar::build_reverse_gmp_message(
+            &addr_bytes[..address.len() as usize],
+            &name_bytes[..primary_name.len() as usize],
+            &chain_bytes[..destination_chain.len() as usize],
+            &resolver_bytes[..resolver.len() as usize],
+        ),
     )
 }
 

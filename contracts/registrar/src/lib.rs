@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 pub mod expiry;
 pub mod pricing;
 mod test;

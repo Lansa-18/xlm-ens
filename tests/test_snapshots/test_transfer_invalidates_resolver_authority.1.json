@@ -417,6 +417,46 @@
                       "key": {
                         "vec": [
                           {
+                            "symbol": "AllowedKeys"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "string": "email"
+                          },
+                          {
+                            "string": "url"
+                          },
+                          {
+                            "string": "avatar"
+                          },
+                          {
+                            "string": "description"
+                          },
+                          {
+                            "string": "twitter"
+                          },
+                          {
+                            "string": "github"
+                          },
+                          {
+                            "string": "discord"
+                          },
+                          {
+                            "string": "telegram"
+                          },
+                          {
+                            "string": "nostr"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
                             "symbol": "Registry"
                           }
                         ]
