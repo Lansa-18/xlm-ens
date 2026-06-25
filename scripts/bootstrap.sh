@@ -50,14 +50,14 @@ else
 fi
 
 header "Wasm target"
-if rustup target list --installed | grep -q '^wasm32-unknown-unknown$'; then
-  echo "wasm32-unknown-unknown: installed"
+if rustup target list --installed | grep -q '^wasm32v1-none$'; then
+  echo "wasm32v1-none: installed"
 else
-  echo "wasm32-unknown-unknown: missing"
+  echo "wasm32v1-none: missing"
   if [[ "$INSTALL" == "true" ]]; then
-    rustup target add wasm32-unknown-unknown
+    rustup target add wasm32v1-none
   else
-    echo "Install with: rustup target add wasm32-unknown-unknown"
+    echo "Install with: rustup target add wasm32v1-none"
   fi
 fi
 

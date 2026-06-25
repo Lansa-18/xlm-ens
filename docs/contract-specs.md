@@ -12,10 +12,10 @@ From the workspace root:
 scripts/gen-specs.sh
 ```
 
-This builds each contract to `wasm32-unknown-unknown` (release) and writes one
+This builds each contract to `wasm32v1-none` (release) and writes one
 spec per contract to **`artifacts/specs/<crate>.json`**, e.g.
 `artifacts/specs/xlm_ns_registry.json`. Requires the `stellar` (or legacy
-`soroban`) CLI and `rustup target add wasm32-unknown-unknown`.
+`soroban`) CLI and `rustup target add wasm32v1-none`.
 
 Contracts covered: `registry`, `registrar`, `resolver`, `subdomain`, `auction`,
 `bridge`, `nft` (artifact basenames use `_`, matching cargo's wasm output names).

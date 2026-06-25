@@ -26,21 +26,21 @@ This starts a local Stellar node with a Soroban RPC endpoint at
 Build the contracts and deploy each one. From the workspace root:
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown \
+cargo build --release --target wasm32v1-none \
   -p xlm-ns-registry \
   -p xlm-ns-registrar \
   -p xlm-ns-resolver
 
 REGISTRY_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/xlm_ns_registry.wasm \
+  --wasm target/wasm32v1-none/release/xlm_ns_registry.wasm \
   --network standalone --source default)
 
 REGISTRAR_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/xlm_ns_registrar.wasm \
+  --wasm target/wasm32v1-none/release/xlm_ns_registrar.wasm \
   --network standalone --source default)
 
 RESOLVER_ID=$(stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/xlm_ns_resolver.wasm \
+  --wasm target/wasm32v1-none/release/xlm_ns_resolver.wasm \
   --network standalone --source default)
 ```
 
@@ -84,12 +84,12 @@ fails CI when the SDK references a method the contract no longer exposes. Run
 it locally after rebuilding the WASM artifacts:
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown \
+cargo build --release --target wasm32v1-none \
   -p xlm-ns-registry -p xlm-ns-registrar -p xlm-ns-resolver \
   -p xlm-ns-auction -p xlm-ns-subdomain -p xlm-ns-nft -p xlm-ns-bridge
 
 mkdir -p artifacts/wasm artifacts/specs
-cp target/wasm32-unknown-unknown/release/xlm_ns_*.wasm artifacts/wasm/
+cp target/wasm32v1-none/release/xlm_ns_*.wasm artifacts/wasm/
 for wasm in artifacts/wasm/*.wasm; do
   base="$(basename "${wasm%.wasm}")"
   soroban contract spec --wasm "$wasm" --output json > "artifacts/specs/${base}.json"

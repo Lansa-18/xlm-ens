@@ -9,14 +9,14 @@
 # Output:  artifacts/specs/<crate>.json   (one per contract, e.g. xlm_ns_registry.json)
 #
 # Requires: the `stellar` (or legacy `soroban`) CLI on PATH, and the
-# wasm32-unknown-unknown target (`rustup target add wasm32-unknown-unknown`).
+# wasm32v1-none target (`rustup target add wasm32v1-none`).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 SPECS_DIR="artifacts/specs"
-WASM_DIR="target/wasm32-unknown-unknown/release"
+WASM_DIR="target/wasm32v1-none/release"
 mkdir -p "$SPECS_DIR"
 
 # Prefer the modern `stellar contract`, fall back to legacy `soroban contract`.
@@ -44,7 +44,7 @@ for entry in "${CONTRACTS[@]}"; do
   pkg="${entry%%:*}"
   base="${entry##*:}"
   echo "==> building $pkg"
-  cargo build --release --target wasm32-unknown-unknown -p "$pkg"
+  cargo build --release --target wasm32v1-none -p "$pkg"
   echo "==> spec $base"
   "${SPEC_CMD[@]}" spec --wasm "$WASM_DIR/${base}.wasm" --output json > "$SPECS_DIR/${base}.json"
 done

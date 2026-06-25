@@ -23,7 +23,7 @@ integration flows.  Read this before opening a PR that touches any file under
 
 Each Soroban contract exposes a machine-readable ABI called a *contract spec*.
 The CI `artifacts` job (`.github/workflows/ci.yml`) builds every contract to
-`wasm32-unknown-unknown`, extracts the spec with `soroban contract spec`, and
+`wasm32v1-none`, extracts the spec with `soroban contract spec`, and
 uploads the JSON files under `artifacts/specs/`.
 
 ### When specs change
@@ -43,13 +43,13 @@ adding new functions over changing existing ones.
 
 ```sh
 # 1. Build the contracts for the wasm target.
-cargo build --release --target wasm32-unknown-unknown \
+cargo build --release --target wasm32v1-none \
   -p xlm-ns-registry -p xlm-ns-registrar -p xlm-ns-resolver \
   -p xlm-ns-auction  -p xlm-ns-subdomain -p xlm-ns-nft -p xlm-ns-bridge
 
 # 2. Regenerate the spec files.
 mkdir -p artifacts/specs
-for wasm in target/wasm32-unknown-unknown/release/xlm_ns_*.wasm; do
+for wasm in target/wasm32v1-none/release/xlm_ns_*.wasm; do
   base="$(basename "${wasm%.wasm}")"
   soroban contract spec --wasm "$wasm" --output json \
     > "artifacts/specs/${base}.json"
@@ -214,12 +214,12 @@ cargo fmt --all --check
 cargo test --workspace
 
 # Build wasm artifacts and regenerate specs
-cargo build --release --target wasm32-unknown-unknown \
+cargo build --release --target wasm32v1-none \
   -p xlm-ns-registry -p xlm-ns-registrar -p xlm-ns-resolver \
   -p xlm-ns-auction  -p xlm-ns-subdomain -p xlm-ns-nft -p xlm-ns-bridge
 
 mkdir -p artifacts/specs
-for wasm in target/wasm32-unknown-unknown/release/xlm_ns_*.wasm; do
+for wasm in target/wasm32v1-none/release/xlm_ns_*.wasm; do
   base="$(basename "${wasm%.wasm}")"
   soroban contract spec --wasm "$wasm" --output json \
     > "artifacts/specs/${base}.json"

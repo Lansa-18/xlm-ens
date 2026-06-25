@@ -25,7 +25,7 @@ fi
 if [[ ! -d "$SPECS_DIR" ]]; then
   echo "error: spec directory '$SPECS_DIR' does not exist." >&2
   echo "       Build it with the CI 'artifacts' job, or run:" >&2
-  echo "         cargo build --release --target wasm32-unknown-unknown -p xlm-ns-registry ..." >&2
+  echo "         cargo build --release --target wasm32v1-none -p xlm-ns-registry ..." >&2
   echo "         soroban contract spec --wasm <file>.wasm --output json > $SPECS_DIR/<file>.json" >&2
   exit 2
 fi

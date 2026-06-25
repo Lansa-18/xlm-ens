@@ -2,7 +2,7 @@
 set -euo pipefail
 
 CONFIG_FILE="${1:-.github/contract-size-budget.json}"
-WASM_DIR="${2:-target/wasm32-unknown-unknown/release}"
+WASM_DIR="${2:-target/wasm32v1-none/release}"
 MARKDOWN_FILE="${3:-artifacts/contract-size-report.md}"
 
 echo "Checking contract WASM sizes against budget..."

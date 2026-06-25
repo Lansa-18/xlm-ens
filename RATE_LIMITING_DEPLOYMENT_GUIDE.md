@@ -76,7 +76,7 @@ cd contracts/registrar
 cargo build --release
 ```
 
-The compiled WASM will be in `target/wasm32-unknown-unknown/release/xlm_ns_registrar.wasm`
+The compiled WASM will be in `target/wasm32v1-none/release/xlm_ns_registrar.wasm`
 
 ### 2. Deploy to Network
 Use the deployment scripts in `scripts/deploy/`:

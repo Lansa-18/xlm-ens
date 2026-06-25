@@ -52,13 +52,13 @@ for entry in "${CRATES[@]}"; do
   PKG_ARGS+=(-p "$pkg")
 done
 
-echo "== Building WASM (release, wasm32-unknown-unknown) =="
-cargo build --release --target wasm32-unknown-unknown "${PKG_ARGS[@]}"
+echo "== Building WASM (release, wasm32v1-none) =="
+cargo build --release --target wasm32v1-none "${PKG_ARGS[@]}"
 
 echo "== Collecting WASM and emitting specs into $OUT_DIR =="
 for entry in "${CRATES[@]}"; do
   IFS='|' read -r _ wasm_root <<<"$entry"
-  src="target/wasm32-unknown-unknown/release/${wasm_root}.wasm"
+  src="target/wasm32v1-none/release/${wasm_root}.wasm"
   dst="$WASM_DIR/${wasm_root}.wasm"
   spec="$SPEC_DIR/${wasm_root}.json"
   if [[ ! -f "$src" ]]; then
